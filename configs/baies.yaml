@@ -10,6 +10,7 @@
 #   emprise         [lon_min, lat_min, lon_max, lat_max] en WGS84, emprise des sites CEVA
 #                   (sert à la détection satellite).
 #   meteo           point utilisé pour Open-Meteo (centre de l'emprise).
+#   houle           point au large pour la houle ERA5 (Open-Meteo Marine).
 #   rivieres        rivières qui se jettent dans la baie :
 #                     debit     code station hydrométrique Hub'Eau (débit journalier)
 #                     nitrates  codes stations qualité Hub'Eau, par ordre de priorité :
@@ -24,6 +25,10 @@ periode:
   debut_donnees: "2001-01-01"   # on charge 2001 pour avoir la valeur N-1 de 2002
   annee_min: 2002
   annee_max: 2022               # dernière année publiée par le CEVA
+  # Surfaces CEVA inférieures à 5 % de la moyenne de la baie : traitées comme manquantes.
+  # Ce sont des zéros qui ressemblent à des données absentes (Fresnaye 2006 et 2010-2014,
+  # Douarnenez 2018 et 2022) ; voir data/README.md.
+  part_min_ceva: 0.05
 
 saisons:
   prevision_jan_avr: [1, 2, 3, 4]      # connu avant la saison : prévision au 1er mai
@@ -38,6 +43,7 @@ baies:
     communes_insee: ["22081", "22154", "22389", "22106", "22278", "22187", "22173"]
     emprise: [-2.7296, 48.4931, -2.5690, 48.5870]
     meteo: {lat: 48.540, lon: -2.649}
+    houle: {lat: 48.75, lon: -2.75}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Gouessant
         debit: J131301001            # Andel, depuis 1979
@@ -55,6 +61,7 @@ baies:
     communes_insee: ["22319", "22350", "22194", "22349"]
     emprise: [-3.6228, 48.6692, -3.5674, 48.7010]
     meteo: {lat: 48.685, lon: -3.595}
+    houle: {lat: 48.80, lon: -3.60}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Yar
         debit: J231491001            # Tréduder, depuis 1980
@@ -67,6 +74,7 @@ baies:
     communes_insee: ["22282", "22143", "22174", "22201"]
     emprise: [-2.3376, 48.6098, -2.2334, 48.6689]
     meteo: {lat: 48.639, lon: -2.286}
+    houle: {lat: 48.75, lon: -2.30}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Frémur d'Hénanbihen
         debit: J120541001            # Pléboulle, seulement depuis 2010
@@ -79,6 +87,7 @@ baies:
     communes_insee: ["29273", "29192", "29276"]
     emprise: [-4.0887, 48.6749, -4.0380, 48.7116]
     meteo: {lat: 48.693, lon: -4.063}
+    houle: {lat: 48.80, lon: -4.05}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Horn
         debit: J301433001            # Mespaul, depuis 1991
@@ -93,6 +102,7 @@ baies:
     communes_insee: ["29077", "29091"]
     emprise: [-4.4530, 48.6352, -4.3977, 48.6605]
     meteo: {lat: 48.648, lon: -4.425}
+    houle: {lat: 48.75, lon: -4.50}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Quillimadec
         # La station du Quillimadec (J311401001) est fermée depuis 1982.
@@ -109,6 +119,7 @@ baies:
     communes_insee: ["29176", "29090", "29172", "29046", "29166", "29256", "29280", "29042"]
     emprise: [-4.5041, 48.0889, -4.2675, 48.2389]
     meteo: {lat: 48.164, lon: -4.386}
+    houle: {lat: 48.15, lon: -4.60}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Kerharo
         debit: J392000601            # Ploéven, seulement depuis 2013
@@ -123,6 +134,7 @@ baies:
     communes_insee: ["29039", "29057", "29058"]
     emprise: [-4.0908, 47.8342, -3.8865, 47.9051]
     meteo: {lat: 47.870, lon: -3.989}
+    houle: {lat: 47.75, lon: -3.95}   # au large (ERA5 vagues, maille de 0,5°)
     rivieres:
       - nom: Moros
         debit: J451401001            # Concarneau, depuis 1991
