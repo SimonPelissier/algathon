@@ -82,3 +82,29 @@ def nitrates(code_station: str, debut: str = "2001-01-01",
     df = df.dropna(subset=["no3_mgL"])
     return (df.groupby("date", as_index=False)["no3_mgL"].mean()
               .sort_values("date").reset_index(drop=True))
+
+
+URL_STATIONS_HYDRO = "https://hubeau.eaufrance.fr/api/v2/hydrometrie/referentiel/stations"
+URL_STATIONS_QUALITE = "https://hubeau.eaufrance.fr/api/v2/qualite_rivieres/station_pc"
+
+
+def coordonnees_stations(codes, nature: str, force: bool = False) -> pd.DataFrame:
+    """Coordonnées (WGS84) de stations Hub'Eau. nature : "debit" ou "nitrates".
+
+    Colonnes : code, libelle, lon, lat. Mis en cache (un fichier par nature).
+    """
+    codes = sorted(set(codes))
+    if nature == "debit":
+        url, champ, champs = URL_STATIONS_HYDRO, "code_station", \
+            "code_station,libelle_station,longitude_station,latitude_station"
+    else:
+        url, champ, champs = URL_STATIONS_QUALITE, "code_station", \
+            "code_station,libelle_station,longitude,latitude"
+    chemin = DOSSIER_RAW / "hubeau" / ("stations_%s.json" % nature)
+    brut = json_en_cache(chemin, lambda: _toutes_les_pages(
+        url, {champ: ",".join(codes), "fields": champs, "size": 1000}), force=force)
+    df = pd.DataFrame(brut).rename(columns={
+        "code_station": "code", "libelle_station": "libelle",
+        "longitude_station": "lon", "latitude_station": "lat",
+        "longitude": "lon", "latitude": "lat"})
+    return df[df["code"].isin(codes)].drop_duplicates("code")[["code", "libelle", "lon", "lat"]]

@@ -53,6 +53,29 @@ donnée sur GéoSAS.
   elle-même), `mars_avr` et `mars_mai` pour la météo.
 
 - `predictions_<jeu>_<validation>.csv` : prédictions hors échantillon de `scripts/baseline_annuel.py`.
+- `s2_scenes.csv` : une ligne par baie et par scène Sentinel-2 (`scripts/detecter_s2.py`) :
+  surface de la zone, surface valide (sans nuage), surface en eau (NDWI > 0) et surfaces
+  d'ulves pour chaque seuil NDVI (`ulva_ha_s010` … `ulva_ha_s040`).
+- `s2_mensuel.csv` : une scène par baie et par mois, la plus basse mer parmi les scènes claires.
+- `s2_annuel.csv` : cumul mai + juillet + septembre, avec la surface CEVA en regard.
+- `s2_mensuel_corrige.csv`, `s2_annuel_corrige.csv` : mêmes séries après affinage pixel par pixel
+  (`scripts/affiner_s2.py`) : végétation fixée, récifs découverts aux grandes marées et liseré
+  côtier exclus ; fenêtres de ± 15 jours autour des mois des survols CEVA. **Séries à utiliser.**
+- `s2_cartes/<baie>.npz` : fréquence de détection par pixel (toutes années et par année),
+  masques d'exclusion ; lus par le notebook 03.
+
+### Sentinel-2 (`data/raw/sentinel2/`)
+
+```bash
+python scripts/detecter_s2.py      # ~40 min la première fois pour 7 baies et 2016-2025 (~4 900 scènes)
+python scripts/calibrer_s2.py
+python scripts/affiner_s2.py       # ~2 min : relit le NDVI des ~390 scènes de basse mer retenues
+```
+
+Planetary Computer, sans compte : recherche STAC publique et jeton SAS anonyme. Seule la
+fenêtre de chaque baie est lue dans les COG. Le cache contient les résultats de recherche
+(`stac/`), les masques de zone (`masques/`) et un petit JSON par scène analysée (`scenes/`) :
+une relance reprend où elle s'était arrêtée.
 
 ## Limites connues
 
