@@ -1,18 +1,19 @@
 """EXPÉRIMENTAL — simulation d'un système de prévision à 5 jours (2017-2025) et comparaison au CEVA.
 
     python scripts/affiner_s2.py --toutes-claires        # surfaces corrigées de toutes les images claires
-    python scripts/prevision_5j_experimentale.py corrige --maree <daily_risk.parquet>
+    python scripts/prevision_5j_experimentale.py corrige
+    python scripts/export_prevision_5j_app.py            # pour l'onglet « Prévision à 5 jours » de l'application
 
 VERSION : brut (surfaces brutes) | corrige (algues fixées exclues).
 La houle hivernale a été testée (ERA5) et retirée : aucun effet fiable (voir notebook 05).
-La marée prévue (hauteur d'eau à 11 h UTC, marégraphes SHOM) vient pour l'instant du fichier
-app/data/daily/daily_risk.parquet de la branche feature/daily-risk d'Allan (--maree) : à remplacer
-par un module d'ingestion commun quand les deux branches seront réunies.
+La marée prévue (hauteur d'eau à 11 h UTC, marégraphes SHOM) vient du fichier
+app/data/daily/daily_risk.parquet de l'application (scripts/build_daily.py d'Allan). À terme : un
+module de marée commun dans src/.
 Sorties dans data/processed/prevision_5j/.
 
 Pour chaque année Y, le modèle est entraîné sans l'année Y (une année laissée de côté).
 À chaque date t (tous les 5 jours, avril-octobre) : dernière image claire ≤ t (≤ 20 j d'âge),
-marée prévue à t+5 (hauteur d'eau à 11 h UTC, SHOM via la branche d'Allan), météo/débits/azote ≤ t.
+marée prévue à t+5 (hauteur d'eau à 11 h UTC, SHOM), météo/débits/azote ≤ t.
 Deux prévisions : surface visible au passage du satellite à t+5 ; surface découverte à basse mer
 (hauteur d'eau fixée au 10e centile de la baie) = ce que mesure un survol CEVA.
 """
@@ -20,7 +21,7 @@ import sys,warnings,numpy as np,pandas as pd
 import argparse
 from pathlib import Path
 _ap=argparse.ArgumentParser(); _ap.add_argument("version",choices=["brut","corrige"])
-_ap.add_argument("--maree",required=True,help="daily_risk.parquet (branche feature/daily-risk)")
+_ap.add_argument("--maree",default=str(Path(__file__).resolve().parents[1]/"app"/"data"/"daily"/"daily_risk.parquet"),help="indice quotidien de l'application (marée à 11 h UTC)")
 _args=_ap.parse_args(); VERSION=_args.version
 warnings.filterwarnings("ignore"); sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
 from sklearn.ensemble import ExtraTreesRegressor

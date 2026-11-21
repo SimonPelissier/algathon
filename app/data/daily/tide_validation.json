@@ -1,0 +1,8 @@
+{
+  "periode_test": "2023-11-21 -> 2024-11-20",
+  "n_jours": 365,
+  "erreur_moyenne_coef": 1.3917808219178083,
+  "erreur_p90_coef": 3.0,
+  "correlation": 0.9967036464166912,
+  "n_ondes": 30
+}
