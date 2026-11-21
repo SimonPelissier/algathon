@@ -63,6 +63,9 @@ def load():
         d["s2_all"] = s2
         d["s2"] = {k: g for k, g in s2.groupby("sector")}
     d["s2_annual"] = pd.read_csv(DATA / "s2" / "s2_annual.csv") if (DATA / "s2" / "s2_annual.csv").exists() else None
+    dr = DATA / "daily" / "daily_risk.parquet"
+    d["daily"] = pd.read_parquet(dr) if dr.exists() else None
+    d["daily_val"] = json.loads((DATA / "daily" / "validation.json").read_text(encoding="utf-8"))         if (DATA / "daily" / "validation.json").exists() else None
     cal = DATA / "s2" / "calibration.json"
     d["s2_cal"] = json.loads(cal.read_text()) if cal.exists() else {"k": 6.3}
     return d
@@ -319,7 +322,8 @@ if m_idx:
                "De novembre à février (soleil bas, peu d'images), la mesure satellite n'est pas utilisée : estimation seule.")
 
 # ----------------------------------------------------------------------------- onglets
-tab1, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📈 Détail d'une plage", "🛰️ Baies pilotes", "🧠 Modèle"])
+tab1, tab5, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📅 Risque jour par jour", "📈 Détail d'une plage",
+                                         "🛰️ Baies pilotes", "🧠 Modèle"])
 
 with tab1:
     show = v[["site", "secteur", "dep", "ha", "ha_lo", "ha_hi", "risque", "facteurs", "source"]].copy()
@@ -331,6 +335,52 @@ with tab1:
     st.dataframe(show.round(1), width="stretch", hide_index=True, height=420)
     st.download_button("Télécharger la liste (CSV)", show.to_csv(index=False).encode("utf-8"),
                        f"plages_ciblees_{year}_{m_idx:02d}.csv", "text/csv")
+
+with tab5:
+    dr = D["daily"]
+    if dr is None:
+        st.info("Indice quotidien non calculé (scripts/build_daily.py).")
+    else:
+        LV = {1: "1 · faible", 2: "2 · modéré", 3: "3 · élevé", 4: "4 · très élevé"}
+        st.markdown("**Indice expérimental de risque d'échouage et d'H₂S, baies pilotes** — "
+                    "stock d'ulves (satellite, corrigé de la marée) × grandes marées × chaleur × calme.")
+        bay = st.selectbox("Baie", sorted(dr["sector"].unique()), key="bay_daily")
+        b = dr[dr["sector"] == bay]
+        fc = b[b["is_forecast"]]
+        if len(fc):
+            st.markdown(f"**Prévision des 10 prochains jours** (marées SHOM/Open-Meteo, météo Météo-France puis ECMWF)")
+            piv = fc.pivot_table(index="site", columns="date", values="niveau").rename(columns=lambda c: c.strftime("%a %d/%m"))
+            st.dataframe(piv.map(lambda x: LV.get(int(x), "") if pd.notna(x) else "")
+                         .style.map(lambda x: {"1": "background-color:#d9efdf", "2": "background-color:#fbefc4",
+                                               "3": "background-color:#f9cfa9", "4": "background-color:#f1a7a7"}
+                                    .get(str(x)[:1], "")), width="stretch")
+            drivers = fc.groupby("date")[["coef", "temperature_2m_max", "wind_speed_10m_max"]].first().round(0)
+            drivers.index = drivers.index.strftime("%a %d/%m")
+            st.dataframe(drivers.rename(columns={"coef": "coefficient de marée", "temperature_2m_max": "T° max (°C)",
+                                                 "wind_speed_10m_max": "vent max (km/h)"}).T, width="stretch")
+        yr = st.slider("Historique : année", 2017, int(b["date"].dt.year.max()), min(year, int(b["date"].dt.year.max())),
+                       key="yr_daily")
+        hb = b[b["date"].dt.year == yr]
+        st.markdown(f"**{yr} — risque H₂S quotidien par plage** (indice, ha équivalents)")
+        st.line_chart(hb.pivot_table(index="date", columns="site", values="risque_h2s"))
+        st.markdown("**Stock d'ulves estimé (ha) et coefficient de marée**")
+        st.line_chart(hb.pivot_table(index="date", columns="site", values="stock_ha").join(
+            hb.groupby("date")["coef"].first()))
+        val = D["daily_val"]
+        if val:
+            st.markdown(f"""
+**Vérification sur {val['n_images']} images Sentinel-2** (même plage, même mois) :
+- hauteur d'eau au passage du satellite : **{(np.exp(val['level_11utc_m']['effet_log_par_unite']) - 1) * 100:+.0f} %**
+  de surface vue par mètre d'eau (t = {val['level_11utc_m']['t']:.0f}) → le stock est corrigé de la marée ;
+- grandes marées des 3 jours précédents : **{(np.exp(10 * val['coef_3j']['effet_log_par_unite']) - 1) * 100:+.1f} %**
+  par 10 points de coefficient (t = {val['coef_3j']['t']:.1f}) → retenu, effet modeste ;
+- vent de mer des 3 jours précédents : **{(np.exp(10 * val['onshore_3j']['effet_log_par_unite']) - 1) * 100:+.0f} %**
+  par 10 km/h (t = {val['onshore_3j']['t']:.0f}) → contraire à l'hypothèse « le vent pousse les algues » :
+  il n'entre pas dans le potentiel ; il intervient dans le risque H₂S (le vent disperse le gaz).
+
+*Indice non encore validé jour par jour : il manque une mesure quotidienne du danger
+(piste : capteurs H₂S d'Air Breizh, tonnages de ramassage des communes).*
+""")
 
 with tab2:
     site = st.selectbox("Plage", v["site"].tolist())

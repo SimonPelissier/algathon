@@ -59,5 +59,16 @@ for f in ["s2/s2_annual.csv", "s2/s2_daily_corrected.csv", "s2/calibration.json"
         (dst / f).parent.mkdir(parents=True, exist_ok=True)
         shutil.copy(src / f, dst / f)
 
+# indice quotidien (baies pilotes) : colonnes utiles, arrondies, en parquet
+dd = src / "daily"
+if dd.exists():
+    cols = ["date", "sector", "site", "stock_ha", "coef", "temperature_2m_max", "wind_speed_10m_max",
+            "shortwave_radiation_sum", "maree", "chaleur", "calme", "potentiel_ha", "risque_h2s", "niveau",
+            "is_forecast", "level_11utc_m"]
+    frames = [pd.read_csv(p, parse_dates=["date"])[cols] for p in dd.glob("*.csv") if p.stem != "forecast"]
+    (dst / "daily").mkdir(exist_ok=True)
+    pd.concat(frames).round(2).to_parquet(dst / "daily/daily_risk.parquet", index=False)
+    shutil.copy(dd / "validation.json", dst / "daily/validation.json")
+
 total = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
 print(f"app/data : {total / 1e6:.1f} Mo")

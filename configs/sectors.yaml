@@ -10,26 +10,38 @@ sectors:
     # bbox de recherche des stations + filtre par nom de rivière (sans accents)
     hydro_bbox: [-2.95, 48.30, -2.45, 48.62]
     rivers: [Gouessant, Evron, Urne, Gouet, Ic]
+    tide_gauge: 506        # marégraphe SHOM le plus proche
+    seaward_deg: 15       # direction du large vue de la plage (vent venant de là = vent de mer)
   lannion:               # Lieue de Grève (Yar, Roscoat, Quinquis)
     ceva_sites: [SAINT-MICHEL-EN-GREVE]
     hydro_bbox: [-3.68, 48.55, -3.50, 48.72]
     rivers: [Yar, Roscoat, Quinquis, Kerdu]
+    tide_gauge: 54        # marégraphe SHOM le plus proche
+    seaward_deg: 340       # direction du large vue de la plage (vent venant de là = vent de mer)
   douarnenez:            # fond de baie de Douarnenez (Kerharo, Lapic, Ris, Névet)
     ceva_sites: [SAINTE-ANNE-LA-PALUD, "KERVEL/TREZMALAOUEN", "KERVIJEN/TY AN QUER", RY, LIEUE-DE-GREVE]
     hydro_bbox: [-4.45, 48.05, -4.05, 48.30]
     rivers: [Kerharo, Lapic, Ris, Nevet, Aber, Kervigen, Lestrevet, Kerloc'h]
+    tide_gauge: 3        # marégraphe SHOM le plus proche
+    seaward_deg: 270       # direction du large vue de la plage (vent venant de là = vent de mer)
   fresnaye:              # 4e site CEVA (moy. ~112 ha/an), en forte hausse depuis 2015
     ceva_sites: [FRESNAYE]
     hydro_bbox: [-2.45, 48.45, -2.15, 48.66]
     rivers: [Fremur, Kermiton, Rat]
+    tide_gauge: 410        # marégraphe SHOM le plus proche
+    seaward_deg: 0       # direction du large vue de la plage (vent venant de là = vent de mer)
   horn_guillec:          # 6e site CEVA (~46 ha/an)
     ceva_sites: ["HORN/GUILLEC"]
     hydro_bbox: [-4.25, 48.55, -3.95, 48.72]
     rivers: [Horn, Guillec]
+    tide_gauge: 54        # marégraphe SHOM le plus proche
+    seaward_deg: 350       # direction du large vue de la plage (vent venant de là = vent de mer)
   guisseny:              # 7e site CEVA (~40 ha/an), Quillimadec-Alanan
     ceva_sites: [GUISSENY]
     hydro_bbox: [-4.55, 48.52, -4.30, 48.66]
     rivers: [Quillimadec, Alanan]
+    tide_gauge: 54        # marégraphe SHOM le plus proche
+    seaward_deg: 330       # direction du large vue de la plage (vent venant de là = vent de mer)
 
 sentinel2:
   # Ulves détectées par seuil NDVI dans les polygones CEVA — À CALIBRER avec les cumuls annuels CEVA

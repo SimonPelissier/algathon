@@ -1,18 +1,21 @@
 {
-  "k": 6.347279326147069,
-  "n": 49,
-  "pearson": 0.8588553750559517,
-  "spearman": 0.6093684160188728,
-  "intra_site_corr": 0.5847523077954371,
+  "k": 4.8295873926337,
+  "n": 72,
+  "pearson": 0.7209027363576591,
+  "spearman": 0.6317213528410096,
+  "intra_site_corr": 0.46762132214445445,
   "background_ha": {
     "BINIC/ETABLES-SUR-MER": 8.84,
-    "KERVEL/TREZMALAOUEN": 3.09,
-    "KERVIJEN/TY AN QUER": 5.02,
-    "LIEUE-DE-GREVE": 23.04,
+    "FRESNAYE": 56.5,
+    "GUISSENY": 33.25,
+    "HORN/GUILLEC": 52.93,
+    "KERVEL/TREZMALAOUEN": 3.1,
+    "KERVIJEN/TY AN QUER": 5.07,
+    "LIEUE-DE-GREVE": 22.85,
     "MORIEUX": 19.51,
-    "RY": 2.2,
+    "RY": 2.23,
     "SAINT-MICHEL-EN-GREVE": 9.78,
-    "SAINTE-ANNE-LA-PALUD": 6.54,
+    "SAINTE-ANNE-LA-PALUD": 6.59,
     "YFFINIAC": 110.64
   }
 }
