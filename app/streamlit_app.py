@@ -422,29 +422,23 @@ if show_sites:
     ha_year = sv["ha"] * (K / PROF.max() if m_idx else 1)
     sv["radius"] = 500 * np.sqrt(ha_year.clip(lower=0))
     sv = to_sea(sv, sv["radius"])
+    # rouge = urgence : plus la plage est à risque, plus le rouge est soutenu
+    alpha = sv["risque"].map({"Très élevé": 235, "Élevé": 185, "Modéré": 125, "Faible": 70}).fillna(70).astype(int)
+    sv["fill"] = [[210, 25, 35, int(a_)] for a_ in alpha]
     layers.append(pdk.Layer("ScatterplotLayer", sv, get_position=["lon", "lat"], get_radius="radius",
-                            radius_min_pixels=3, get_fill_color=[30, 150, 60, 170], stroked=True,
-                            get_line_color=[10, 90, 30, 230], line_width_min_pixels=1,
+                            radius_min_pixels=3, get_fill_color="fill", stroked=True,
+                            get_line_color=[120, 0, 15, 230], line_width_min_pixels=1,
                             pickable=True, auto_highlight=True))
-if dv is not None:  # jour choisi : anneau coloré par niveau autour des plages pilotes
-    ring = dv.merge(sv[["site", "radius"]], on="site", how="left") if show_sites else dv.assign(radius=2500.0)
-    ring["radius"] = ring["radius"].fillna(2500.0)
-    ring = to_sea(ring, ring["radius"])
-    ring["c"] = ring["niveau"].map(lambda x: LEVEL_RGB.get(int(x), [150, 150, 150]) + [255])
-    ring["label"] = ring["site"] + f" — {day:%d/%m/%Y} : niveau " + ring["niveau"].map(lambda x: LEVEL_TXT.get(int(x), ""))
-    ring["ring_r"] = ring["radius"] + 900
-    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius="ring_r",
-                            filled=False, stroked=True, get_line_color="c", line_width_min_pixels=4, pickable=True))
 
 st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=0),
                          tooltip={"text": "{label}"}), width="stretch", height=560)
-st.caption("🟢 Cercles verts : marée verte par plage — plus le cercle est grand, plus la surface d'ulves est grande ("
-           + ("présente en moyenne ce mois-ci" if m_idx else "cumul annuel")
-           + ") · ⬡ Zones : nitrates des rivières, blanc < 10 mg/L → jaune vif ≥ 50 mg/L (moyenne des points de "
-           "mesure de la zone ; la concentration reflète l'azote lessivé par l'eau qui draine les sols)"
-           + (" · ⭕ Anneaux : niveau de risque du jour (vert 1 → rouge 4)" if dv is not None else "")
-           + " · grands disques (météo) : écart à la normale.")
+st.markdown("🔴 **Cercles rouges : marée verte devant chaque plage** — plus le cercle est grand et rouge foncé, "
+            "plus il y a d'ulves (" + ("présentes en moyenne ce mois-ci" if m_idx else "cumul de l'année")
+            + ") et plus l'urgence est forte. 🟨 **Zones jaunes : nitrates des rivières** — blanc = peu d'azote "
+            "lessivé des sols (< 10 mg/L), jaune vif = beaucoup (≥ 50 mg/L).")
+if show_meteo:
+    st.caption("Grands disques (météo) : écart à la normale.")
 if m_idx:
     st.caption("Mois : cumul annuel ÷ " + f"{K:.1f}" + " × profil saisonnier mesuré par Sentinel-2 sur les baies "
                "pilotes ; quand le satellite a mesuré la plage au moins 2 fois ce mois-là, c'est sa mesure qui s'affiche. "
