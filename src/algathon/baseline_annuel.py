@@ -91,11 +91,15 @@ def fabriquer_modeles() -> Dict[str, object]:
     }
 
 
-def evaluer(table: pd.DataFrame, variables: List[str], methode: str = "glissante") -> pd.DataFrame:
+def evaluer(table: pd.DataFrame, variables: List[str], methode: str = "glissante",
+            modeles=None) -> pd.DataFrame:
     """Prédictions hors échantillon de chaque modèle et des deux références naïves.
 
     Renvoie une ligne par (baie, année testée) avec les colonnes vrai, pred_<méthode>.
+    `modeles` : fonction sans argument renvoyant {nom: modèle sklearn} (défaut : Ridge et
+    gradient boosting). Un modèle neuf est créé à chaque pli.
     """
+    modeles = modeles or fabriquer_modeles
     df = table.dropna(subset=[CIBLE]).copy()
     baies = sorted(df["baie"].unique())
     plis = plis_glissants if methode == "glissante" else plis_loyo
@@ -111,7 +115,7 @@ def evaluer(table: pd.DataFrame, variables: List[str], methode: str = "glissante
         sortie["pred_moyenne"] = test["baie"].map(moyennes).values
         Xtr, Xte = matrice(train, variables, baies), matrice(test, variables, baies)
         ytr = np.log1p(train[CIBLE].values)
-        for nom, modele in fabriquer_modeles().items():
+        for nom, modele in modeles().items():
             modele.fit(Xtr, ytr)
             sortie["pred_" + nom] = np.expm1(modele.predict(Xte)).clip(min=0)
         resultats.append(sortie)
