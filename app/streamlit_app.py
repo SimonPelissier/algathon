@@ -556,8 +556,9 @@ if m_idx:
                "De novembre à février (soleil bas, peu d'images), la mesure satellite n'est pas utilisée : estimation seule.")
 
 # ----------------------------------------------------------------------------- onglets
-tab1, tab5, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📅 Risque jour par jour", "📈 Détail d'une plage",
-                                         "🛰️ Baies pilotes", "🧠 Modèle"])
+tab1, tab5, tab6, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📅 Risque jour par jour",
+                                               "🔮 Prévision à 5 jours", "📈 Détail d'une plage",
+                                               "🛰️ Baies pilotes", "🧠 Modèle"])
 
 with tab1:
     show = v[["site", "secteur", "dep", "ha", "ha_lo", "ha_hi", "risque", "facteurs", "source"]].copy()
@@ -704,3 +705,102 @@ d'hivers à venir, d'où les scénarios.
     coefs = pd.Series(m["coefficients"]).rename(lambda c: LABELS[c.removesuffix("_a").removesuffix("_anom")])
     st.markdown("**Effet de chaque variable** (coefficient standardisé sur l'écart de log-surface)")
     st.bar_chart(coefs.sort_values(), horizontal=True)
+
+
+# ----------------------------------------------------------------------------- prévision à 5 jours
+@st.cache_data
+def load_prevision_5j():
+    """Résultats du système de prévision à 5 jours (scripts/export_prevision_5j_app.py)."""
+    p = DATA / "prevision_5j"
+    if not (p / "courbes.csv").exists():
+        return None
+    return {
+        "courbes": pd.read_csv(p / "courbes.csv", parse_dates=["date_cible"]),
+        "eval": pd.read_csv(p / "evaluation.csv", parse_dates=["date"]),
+        "scores": pd.read_csv(p / "scores.csv"),
+        "cumuls": pd.read_csv(p / "cumuls.csv"),
+        "baies": pd.read_csv(p / "baies.csv"),
+    }
+
+
+with tab6:
+    import altair as alt
+
+    P5 = load_prevision_5j()
+    if P5 is None:
+        st.info("Prévision à 5 jours non exportée : lancer scripts/prevision_5j_experimentale.py "
+                "puis scripts/export_prevision_5j_app.py.")
+    else:
+        st.markdown(
+            "**Prévision tous les 5 jours de la surface d'ulves, 7 baies** — dernière image satellite claire "
+            "(surfaces corrigées des algues fixées) + **marée prévue** + météo, débits et azote des jours "
+            "précédents → surface attendue à J+5. Simulation 2017-2025 : chaque année est prévue par un "
+            "modèle (Extra Trees + Ridge) entraîné sans elle.")
+        nom_baie = dict(zip(P5["baies"]["baie"], P5["baies"]["nom"]))
+        c1, c2 = st.columns([2, 1])
+        baie5 = c1.selectbox("Baie", list(nom_baie), format_func=lambda b: nom_baie[b], key="baie_5j")
+        annees5 = sorted(P5["courbes"]["annee"].unique())
+        annee5 = c2.selectbox("Saison", annees5, index=annees5.index(2019) if 2019 in annees5 else 0,
+                              key="annee_5j")
+
+        sc = P5["scores"].set_index("baie")
+        s, tout = sc.loc[baie5], sc.loc["toutes"]
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Gain vs « même chose que la dernière image »", f"{s['gain_vs_persistance_pct']:+.0f} %",
+                  f"{tout['gain_vs_persistance_pct']:+.0f} % sur les 7 baies", delta_color="off")
+        k2.metric("Prévisions à ±50 %", f"{s['part_a_50pct']:.0f} %",
+                  f"{tout['part_a_50pct']:.0f} % sur les 7 baies", delta_color="off")
+        k3.metric("Erreur moyenne à J+5", f"{s['erreur_moyenne_ha']:.0f} ha")
+        k4.metric("Prévisions évaluées", f"{int(s['previsions'])}")
+
+        cb = P5["courbes"][(P5["courbes"]["baie"] == baie5) & (P5["courbes"]["annee"] == annee5)]
+        ev5 = P5["eval"][(P5["eval"]["baie"] == baie5) & (P5["eval"]["annee"] == annee5)]
+        lignes = cb.melt(id_vars="date_cible", value_vars=["stock_ha", "visible_ha"], var_name="serie",
+                         value_name="ha").replace({"serie": {"stock_ha": "Prévu : stock (grande marée basse)",
+                                                             "visible_ha": "Prévu : surface visible (marée du jour)"}})
+        points = pd.concat([
+            ev5[["date", "observe_ha"]].rename(columns={"observe_ha": "ha"}).assign(serie="Observé par satellite"),
+            ev5[["date", "prevu_ha"]].rename(columns={"prevu_ha": "ha"}).assign(serie="Prévu 5 jours avant"),
+        ]).rename(columns={"date": "date_cible"})
+        couleurs = alt.Scale(domain=["Prévu : stock (grande marée basse)", "Prévu : surface visible (marée du jour)",
+                                     "Observé par satellite", "Prévu 5 jours avant"],
+                             range=["#0E8A6E", "#F08A24", "#10312B", "#C8102E"])
+        graphe = (alt.Chart(lignes).mark_line(strokeWidth=2.2)
+                  .encode(x=alt.X("date_cible:T", title=None), y=alt.Y("ha:Q", title="surface d'ulves (ha)"),
+                          color=alt.Color("serie:N", scale=couleurs, title=None))
+                  + alt.Chart(points).mark_point(filled=True, size=70)
+                  .encode(x="date_cible:T", y="ha:Q",
+                          color=alt.Color("serie:N", scale=couleurs, title=None),
+                          shape=alt.Shape("serie:N", title=None,
+                                          scale=alt.Scale(domain=["Observé par satellite", "Prévu 5 jours avant"],
+                                                          range=["circle", "cross"])),
+                          tooltip=["serie", alt.Tooltip("date_cible:T", title="date"), alt.Tooltip("ha:Q", format=".0f")]))
+        st.altair_chart(graphe.properties(height=380).configure_legend(orient="bottom"), use_container_width=True)
+        st.caption("Unité : hectares détectés par le satellite (algues fixées sur les rochers exclues). "
+                   "La courbe orange suit la marée : à marée haute, les ulves sont cachées.")
+
+        cu = P5["cumuls"][(P5["cumuls"]["baie"] == baie5)].dropna(subset=["ceva_ha"])
+        if len(cu):
+            st.markdown("**Cumul de la saison (mai + juillet + septembre), ramené à l'échelle CEVA** — "
+                        "facteur d'échelle de la baie calculé sur 2017-2022 (années communes avec le CEVA).")
+            cul = cu.melt(id_vars="annee", value_vars=["ceva_ha", "cumul_prevu_ha"], var_name="source",
+                          value_name="ha").replace({"source": {"ceva_ha": "CEVA", "cumul_prevu_ha": "Système 5 jours"}})
+            barres = (alt.Chart(cul).mark_bar()
+                      .encode(x=alt.X("source:N", title=None, axis=alt.Axis(labels=False, ticks=False)),
+                              y=alt.Y("ha:Q", title="ha"), color=alt.Color("source:N", title=None,
+                              scale=alt.Scale(domain=["CEVA", "Système 5 jours"], range=["#10312B", "#0E8A6E"])),
+                              column=alt.Column("annee:O", title=None), tooltip=["source", "annee", "ha"])
+                      .properties(width=60, height=220))
+            st.altair_chart(barres)
+
+        st.markdown("""
+**À retenir.** À 5 jours, le système fait environ 45 % mieux que « même chose que la dernière image »,
+presque entièrement grâce à la **marée prévue** : il sait quand le stock d'algues sera découvert.
+Il retrouve le niveau moyen de chaque baie, mais **n'annonce pas une saison exceptionnelle** :
+le cumul de la saison reste à environ ±40 % du CEVA. Détails : `notebooks/05_prevision_5j.ipynb`.
+""")
+        st.dataframe(P5["scores"].rename(columns={"baie": "baie", "previsions": "prévisions",
+                                                  "erreur_moyenne_ha": "erreur moyenne (ha)",
+                                                  "part_a_50pct": "à ±50 % (%)",
+                                                  "gain_vs_persistance_pct": "gain vs persistance (%)"}),
+                     hide_index=True)
