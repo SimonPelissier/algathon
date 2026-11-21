@@ -1,0 +1,6 @@
+code_station,libelle_station,longitude_station,latitude_station,libelle_cours_eau,mean_flow,n_days
+J140531001,L'Urne à Plédran - Magenta,-2.751962352,48.4667859,l'Urne,0.4103799327011319,3283.0
+J161401001,L'Ic à Binic - Ancienne échelle,-2.852454577,48.601096867,l'Ic,1.0427540983606558,2591.0
+J132401001,L'Evron à Coëtmieux - La Rue,-2.606062841,48.490325047,l'Evron,1.1526181928810466,3287.0
+J131301001,Le Gouessant à Andel - Le Quingueret,-2.567963009,48.484562481,le Gouessant,1.520006693033161,3287.0
+J152302001,Le Gouët à Ploufragan - Le Pré Aly [aval barrage Saint-Barthélémy],-2.82723075,48.510232526,le Gouët,1.947900821417706,3287.0

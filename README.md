@@ -51,10 +51,40 @@ tests/           tests unitaires
 
 **Approche de base** : gradient boosting sur des features tabulaires (indices spectraux et variables locales, avec leurs lags), validé par un **découpage temporel** (on n'entraîne jamais sur le futur). Des extensions sont prévues : U‑Net pour segmenter les ulves sur les images Sentinel‑2, et un modèle spatio‑temporel de type ConvLSTM.
 
+## L'Observatoire (application cartographique)
+
+Développée par Allan Silvera.
+
+Carte interactive de la Bretagne et de la façade atlantique (Cotentin → Vendée) :
+- **curseur temporel 2002 → 2027** : surfaces d'ulves observées (CEVA) jusqu'en 2022, estimées ensuite, prévues pour 2027 ;
+- **couches** : surface d'ulves par plage (colonnes 3D), nitrates des rivières, densité d'élevages (ICPE), flux de nitrates vers les baies pilotes ;
+- **scénarios 2027** : type d'hiver (doux / médian / rude), variation des nitrates et des élevages ;
+- **plages ciblées** : classement exportable des plages à risque ;
+- **suivi Sentinel-2** des baies pilotes.
+
+```bash
+streamlit run app/streamlit_app.py      # Python 3.10 ou plus
+```
+
+L'onglet **« Prévision à 5 jours »** affiche le système de prévision de `main` (`scripts/prevision_5j_experimentale.py`) ; ses données sont copiées dans `app/data/prevision_5j/` par `python scripts/export_prevision_5j_app.py`.
+
+
+Pipeline complet pour régénérer les données de l'application :
+```bash
+python scripts/fetch_ceva.py
+python scripts/fetch_regional.py            # météo NASA POWER, nitrates Hub'Eau, élevages Géorisques
+python scripts/fetch_hubeau.py              # flux de nitrates des baies pilotes
+python scripts/fetch_s2.py --backend cdse   # surfaces d'ulves Sentinel-2 (compte CDSE)
+python scripts/train_seasonal.py            # modèle saisonnier + prévisions
+python scripts/export_app_data.py           # données légères pour app/data/
+```
+
 ## Démarrage rapide
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate   # Windows
+# Python du Microsoft Store : créer plutôt le venv dans un chemin court
+# (ex. %USERPROFILE%\.venvs\algathon), sinon l'installation de streamlit échoue
 pip install -r requirements.txt
 python scripts/train.py --config configs/default.yaml
 ```
@@ -95,10 +125,12 @@ satellite (Sentinel-2) pour obtenir des surfaces datées.
 ## Feuille de route
 
 - [x] Squelette du pipeline (indices, features, baseline, validation temporelle)
-- [ ] Choisir la cible prioritaire : marées vertes (*Ulva*) ou micro‑algues toxiques
-- [ ] Choisir les baies pilotes (ex. Saint‑Brieuc, Lannion, Douarnenez)
-- [ ] Ingestion Sentinel‑2 sur ces baies (Earth Engine ou openEO), avec masque nuages
-- [ ] Récupérer la vérité terrain (CEVA et/ou REPHY) et l'aligner avec les images
-- [ ] Ajouter les variables locales : nitrates/débits des rivières, SST, météo, marées
-- [ ] Baseline avec métriques PR‑AUC et F1 par horizon
-- [ ] Cartes de risque et tableau de bord
+- [x] Cible : marées vertes, prévision des échouages (saison et court terme J+5) pour les communes
+- [x] Vérité terrain CEVA ouverte : contours des sites + cumuls annuels 2002-2022, règle de qualité sur les quasi-zéros
+- [x] Débits + nitrates des rivières (Hub'Eau), météo (Open-Meteo, NASA POWER)
+- [x] Surfaces d'ulves Sentinel-2 sans compte (Planetary Computer), marée et algues fixées corrigées, calibrées sur le CEVA
+- [x] Modèles de saison comparés (11 familles) ; Extra Trees et Ridge sur écarts retenus
+- [x] Prévision à 5 jours (stock satellite + marée prévue) et indice de risque H2S quotidien
+- [x] Application cartographique (Observatoire)
+- [ ] Module de marée commun (SHOM) dans `src/` ; une seule chaîne d'ingestion et de détection
+- [ ] Demander au CEVA les surfaces par survol (7 par an)

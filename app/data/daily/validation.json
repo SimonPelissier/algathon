@@ -1,0 +1,21 @@
+{
+  "level_11utc_m": {
+    "effet_log_par_unite": -0.3768194216223758,
+    "t": -29.78706293607945
+  },
+  "onshore_3j": {
+    "effet_log_par_unite": -0.023090416556535043,
+    "t": -8.899482778386323
+  },
+  "coef_3j": {
+    "effet_log_par_unite": 0.003481092820331891,
+    "t": 2.7616222224068783
+  },
+  "n_images": 3675,
+  "n_plage_mois": 870,
+  "lecture": {
+    "level_11utc_m": "hauteur d'eau au passage du satellite (m) : négatif attendu (algues cachées à marée haute)",
+    "onshore_3j": "vent de mer moyen des 3 jours précédents (km/h) : positif attendu (algues poussées à la côte)",
+    "coef_3j": "plus grand coefficient de marée des 3 jours précédents : positif attendu (dépôt haut sur l'estran)"
+  }
+}
