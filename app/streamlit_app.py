@@ -66,6 +66,13 @@ def load():
     dr = DATA / "daily" / "daily_risk.parquet"
     d["daily"] = pd.read_parquet(dr) if dr.exists() else None
     d["daily_val"] = json.loads((DATA / "daily" / "validation.json").read_text(encoding="utf-8"))         if (DATA / "daily" / "validation.json").exists() else None
+    rv = DATA / "rivers"
+    if (rv / "rivers.json").exists():
+        d["rivers"] = pd.DataFrame(json.loads((rv / "rivers.json").read_text(encoding="utf-8")))
+        d["river_st"] = pd.read_csv(rv / "river_no3_st.csv", dtype={"code_station": str})
+        d["river_q"] = pd.read_csv(rv / "river_flow.csv")
+    else:
+        d["rivers"] = None
     tp = DATA / "daily" / "tide_brest_pred.csv"
     d["tide_pred"] = pd.read_csv(tp, parse_dates=["date"]).set_index("date")["coef_pred"] if tp.exists() else None
     tv = DATA / "daily" / "tide_validation.json"
@@ -164,6 +171,50 @@ def to_sea(df: pd.DataFrame, radius_m: pd.Series) -> pd.DataFrame:
     return df
 
 
+def river_paths(D, no3: pd.DataFrame, year: int, m_idx: int, future: bool, site_pos: pd.DataFrame, when: str):
+    """Rivières côtières : couleur = nitrates mesurés sur la rivière (blanc -> jaune vif),
+    épaisseur = flux d'azote estimé (débit x concentration), prolongées jusqu'au cercle de leur plage."""
+    R, rs, rq = D["rivers"], D["river_st"], D["river_q"]
+    st_no3 = no3.dropna(subset=["no3"]).groupby("code_station")["no3"].mean()
+    c = rs.assign(no3=rs["code_station"].map(st_no3)).dropna(subset=["no3"]).groupby("name")["no3"].mean()
+    # débit : mesuré (année/mois choisis) sinon normale ; sans station : estimé d'après la longueur
+    if not future and (rq["year"] == year).any():
+        sel = rq[(rq["year"] == year) & ((rq["month"] == m_idx) if m_idx else True)]
+    else:
+        sel = rq[(rq["month"] == m_idx)] if m_idx else rq
+    q = sel.groupby("name")["q_m3s"].mean()
+    ln = R.drop_duplicates("name").set_index("name")["length_km"]
+    ok = q.index.intersection(ln.index)
+    if len(ok) >= 5:
+        b = np.polyfit(np.log(ln[ok]), np.log(q[ok].clip(lower=0.01)), 1)
+        q_est = pd.Series(np.exp(np.polyval(b, np.log(ln.values))), index=ln.index)
+    else:
+        q_est = ln * 0.05
+    q = q.dropna()
+    q_all = q.reindex(ln.index).fillna(q_est).fillna(0.1)
+    paths = R.copy()
+    paths["no3"] = paths["name"].map(c)
+    paths = paths.dropna(subset=["no3"])
+    paths["q"] = paths["name"].map(q_all)
+    paths["q_mes"] = paths["name"].isin(q.index)
+    paths["flux"] = paths["q"] * paths["no3"] * 86.4  # kg NO3 / jour
+    # prolongement : embouchure -> cercle de la plage d'arrivée
+    pos = site_pos.set_index("site")[["lon", "lat"]]
+    ext = paths.drop_duplicates("name").copy()
+    ext = ext[ext["site"].isin(pos.index)]
+    ext["path"] = [[m, [float(pos.loc[s_, "lon"]), float(pos.loc[s_, "lat"])]] for m, s_ in zip(ext["mouth"], ext["site"])]
+    paths = pd.concat([paths, ext], ignore_index=True)
+    t = ((paths["no3"] - 10) / 40).clip(0, 1).values
+    paths["c"] = [[255, int(250 - 50 * v), int(235 - 235 * v), 235] for v in t]
+    paths["w"] = (1.5 + np.sqrt(paths["flux"].clip(lower=0)) / 8).clip(1.5, 16)
+    paths["w_under"] = paths["w"] + 2
+    paths["label"] = (paths["name"] + " → " + paths["site"] + " : " + paths["no3"].round(0).astype(int).astype(str)
+                      + " mg NO₃/L, ≈ " + paths["flux"].round(-1).astype(int).map(lambda x: f"{x:,}".replace(",", " "))
+                      + " kg d'azote (NO₃) par jour (" + when + ", débit "
+                      + np.where(paths["q_mes"], "mesuré", "estimé") + ")")
+    return paths
+
+
 HEX_KM = 7.0  # rayon des zones hexagonales
 
 
@@ -194,7 +245,7 @@ def hex_zones(no3: pd.DataFrame, livestock: pd.DataFrame) -> pd.DataFrame:
     n_lv = pd.Series(1, index=pd.MultiIndex.from_arrays([lq, lr])).groupby(level=[0, 1]).sum()
     z["n_lv"] = [int(n_lv.get((a, b), 0)) for a, b in zip(z["q"], z["r"])]
     t = ((z["no3"] - 10) / 40).clip(0, 1).values
-    z["c"] = [[255, int(255 - 40 * v), int(255 - 255 * v), int(70 + 150 * v)] for v in t]
+    z["c"] = [[255, int(255 - 40 * v), int(255 - 255 * v), int(40 + 110 * v)] for v in t]  # pâle : les rivières dominent
     z["poly"] = [_hex_poly(a, b) for a, b in zip(z["q"], z["r"])]
     return z
 
@@ -335,6 +386,11 @@ if day is not None:
                                      .get(str(x)[:1], ""), subset=["niveau"]), width="stretch", hide_index=True)
 
 # ----------------------------------------------------------------------------- carte
+# cercles des plages : rayon (surface du disque ∝ surface d'ulves), posés en mer devant la plage
+sv = v.copy()
+sv["radius"] = 500 * np.sqrt((sv["ha"] * (K / PROF.max() if m_idx else 1)).clip(lower=0))
+sv = to_sea(sv, sv["radius"])
+site_pos = sv[["site", "lon", "lat"]]
 layers = []
 if show_lv:
     lv = D["livestock"].copy()
@@ -368,6 +424,13 @@ if show_no3:
                       + " élevage(s) classé(s)")
     layers.append(pdk.Layer("PolygonLayer", zones, get_polygon="poly", get_fill_color="c", stroked=True,
                             get_line_color=[255, 255, 255, 120], line_width_min_pixels=1, pickable=True))
+    if D.get("rivers") is not None:
+        rp = river_paths(D, no3, year, m_idx, future, site_pos, when)
+        layers.append(pdk.Layer("PathLayer", rp, get_path="path", get_width="w_under", width_units=pdk.types.String("pixels"),
+                                get_color=[70, 70, 70, 170], cap_rounded=True, joint_rounded=True))
+        layers.append(pdk.Layer("PathLayer", rp, get_path="path", get_width="w", width_units=pdk.types.String("pixels"),
+                                get_color="c", cap_rounded=True, joint_rounded=True, pickable=True,
+                                auto_highlight=True))
 if show_meteo:
     name, unit = METEO[meteo_var]
     pos = D["table"].groupby("site")[["lon", "lat"]].first()
@@ -415,13 +478,8 @@ if show_meteo:
                             get_fill_color="[r, g, b, 150]", stroked=True, get_line_color=[90, 90, 90, 120],
                             line_width_min_pixels=1, pickable=True))
 if show_sites:
-    sv = v.copy()
     sv["label"] = (sv["site"] + " — " + sv["ha"].round(1).astype(str) + " ha (" + sv["risque"] + ") · "
                    + sv["source"])
-    # cercle vert, surface du disque proportionnelle à la surface d'ulves (même échelle année / mois)
-    ha_year = sv["ha"] * (K / PROF.max() if m_idx else 1)
-    sv["radius"] = 500 * np.sqrt(ha_year.clip(lower=0))
-    sv = to_sea(sv, sv["radius"])
     # rouge = urgence : plus la plage est à risque, plus le rouge est soutenu
     alpha = sv["risque"].map({"Très élevé": 235, "Élevé": 185, "Modéré": 125, "Faible": 70}).fillna(70).astype(int)
     sv["fill"] = [[210, 25, 35, int(a_)] for a_ in alpha]
@@ -435,8 +493,9 @@ st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          tooltip={"text": "{label}"}), width="stretch", height=560)
 st.markdown("🔴 **Cercles rouges : marée verte devant chaque plage** — plus le cercle est grand et rouge foncé, "
             "plus il y a d'ulves (" + ("présentes en moyenne ce mois-ci" if m_idx else "cumul de l'année")
-            + ") et plus l'urgence est forte. 🟨 **Zones jaunes : nitrates des rivières** — blanc = peu d'azote "
-            "lessivé des sols (< 10 mg/L), jaune vif = beaucoup (≥ 50 mg/L).")
+            + ") et plus l'urgence est forte. 🟨 **Rivières et zones jaunes : nitrates** — plus c'est jaune vif, "
+            "plus l'eau est chargée en azote lessivé des sols (blanc < 10 mg/L, jaune ≥ 50 mg/L) ; plus la rivière "
+            "est épaisse, plus elle apporte d'azote à la baie.")
 if show_meteo:
     st.caption("Grands disques (météo) : écart à la normale.")
 if m_idx:
