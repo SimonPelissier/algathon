@@ -17,12 +17,37 @@ worldcover:
 # Classes SCL écartées : 0 pas de donnée, 1 saturé, 3 ombre de nuage, 8-9 nuages, 10 cirrus
 scl_invalides: [0, 1, 3, 8, 9, 10]
 
+# Garde-fous pour l'eau sombre (indispensables depuis le décalage de réflectance de 2022) :
+nir_min_ulve: 0.02            # réflectance proche infrarouge minimale pour compter une ulve
+sombre_max: 0.02              # pixel avec vert + proche infrarouge < 0,02 : compté comme eau
+
 # Seuils NDVI testés : le bon seuil est choisi en comparant aux cumuls CEVA (calibration).
 seuils_ndvi: [0.10, 0.15, 0.20, 0.25, 0.30, 0.40]
 
 selection:
   part_valide_min: 0.90       # part de la zone sans nuage ni trou pour garder une scène
   mois_ceva: [5, 7, 9]        # mois des survols CEVA (mai, juillet, septembre)
+  tolerance_jours: 15         # scènes acceptées jusqu'à 15 j avant/après le mois de survol
+
+# Affinage pixel par pixel (scripts/affiner_s2.py) sur les scènes de basse mer retenues.
+affinage:
+  seuil_ndvi: 0.20            # seuil retenu à la calibration
+  # Végétation permanente : pixel détecté dans au moins 60 % de ses scènes de basse mer
+  # (avril-octobre, toutes années). Les ulves libres bougent avec la marée ; les algues
+  # brunes fixées sur les rochers et les herbiers restent au même endroit.
+  frequence_permanente: 0.60
+  n_scenes_min: 10            # nombre minimal de scènes valides pour juger un pixel
+  # Critère optionnel : pixel détecté dans >= 20 % de ses scènes, au moins 70 % des années.
+  # Testé le 2026-11-21 : ne corrige pas Concarneau ni Douarnenez et dégrade Horn-Guillec
+  # (Spearman 0,30 -> 0,10) et Saint-Brieuc (rapport 0,78 -> 0,65). Désactivé.
+  # persistance_annuelle: {frequence_min: 0.20, part_annees: 0.70}
+  persistance_annuelle: null
+  # Algue fixée sur roche : détectée dans >= 70 % des scènes où le pixel est découvert
+  # (ni eau ni très sombre). Rattrape les récifs découverts seulement aux grandes marées.
+  fixe_si_decouvert:
+    frequence_min: 0.70
+    n_decouvert_min: 3
+  erosion_pixels: 1           # liseré de la zone retiré (pixels mixtes terre/mer)
 
 periode:
   annees: [2016, 2025]        # Sentinel-2 L2A disponible à partir de juillet 2015

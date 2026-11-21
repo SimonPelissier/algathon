@@ -158,7 +158,9 @@ def reflectance(dn: np.ndarray, baseline: Optional[str]) -> np.ndarray:
     return (dn.astype("float32") - decalage) / 10000.0
 
 
-def analyser_scene(conf: dict, code_baie: str, item: dict, geoms: List[dict], emprise) -> dict:
+def analyser_scene(conf: dict, code_baie: str, item: dict, geoms: List[dict], emprise,
+                   pixels: bool = False) -> dict:
+    """Totaux d'une scène (ha). Avec pixels=True, renvoie plutôt le NDVI pixel par pixel."""
     p = item["properties"]
     coll = conf["stac"]["collection"]
     with rasterio.Env(**ENV_GDAL):
@@ -179,12 +181,28 @@ def analyser_scene(conf: dict, code_baie: str, item: dict, geoms: List[dict], em
 
     zone = masque_zone(conf, code_baie, geoms, emprise, crs, transform, forme)
     base = p.get("s2:processing_baseline")
-    g, r, nir = (reflectance(bandes[b], base) for b in ("B03", "B04", "B08"))
+    # Depuis 2022 (décalage de +1000), l'eau très sombre donne des réflectances légèrement
+    # négatives une fois le décalage retiré : on les ramène à 0. Sinon NDVI et NDWI,
+    # qui sont des rapports, deviennent instables et l'eau noire passe pour des ulves.
+    g, r, nir = (np.clip(reflectance(bandes[b], base), 0, None) for b in ("B03", "B04", "B08"))
     with np.errstate(invalid="ignore", divide="ignore"):
-        ndvi = (nir - r) / (nir + r)
-        ndwi = (g - nir) / (g + nir)
-    valide = zone & (bandes["B04"] > 0) & ~np.isin(scl, conf["scl_invalides"]) & np.isfinite(ndvi)
-    eau = valide & (ndwi > 0)
+        ndvi = np.where(nir + r > 0, (nir - r) / (nir + r), 0.0)
+        ndwi = np.where(g + nir > 0, (g - nir) / (g + nir), 0.0)
+    valide = zone & (bandes["B04"] > 0) & ~np.isin(scl, conf["scl_invalides"])
+    # Une ulve réfléchit nettement le proche infrarouge ; un pixel trop sombre est de l'eau.
+    peut_etre_ulve = nir >= conf["nir_min_ulve"]
+    sombre = (g + nir) < conf["sombre_max"]
+    if pixels:
+        # NDVI en centièmes sur int8 (-128 = pixel hors zone ou invalide) : ~1 octet par pixel.
+        # Les pixels trop sombres en infrarouge reçoivent -100 : jamais comptés comme ulves.
+        ndvi_i8 = np.where(valide, np.where(peut_etre_ulve, np.clip(np.round(ndvi * 100), -100, 100), -100),
+                           -128).astype("int8")
+        # Pixel découvert (ni eau ni très sombre) : sert à juger les algues fixées sur roche,
+        # visibles seulement quand la marée les découvre.
+        decouvert = valide & (ndwi <= 0) & ~sombre
+        return {"ndvi_i8": ndvi_i8, "decouvert": decouvert, "crs": str(crs),
+                "transform": tuple(transform)[:6], "forme": forme}
+    eau = valide & ((ndwi > 0) | sombre)
     date_utc = pd.Timestamp(p["datetime"])
     res = {
         "baie": code_baie,
@@ -199,7 +217,8 @@ def analyser_scene(conf: dict, code_baie: str, item: dict, geoms: List[dict], em
         "eau_ha": float(eau.sum() * HA_PAR_PIXEL),
     }
     for s in conf["seuils_ndvi"]:
-        res["ulva_ha_s%03d" % round(s * 100)] = float((valide & (ndvi > s)).sum() * HA_PAR_PIXEL)
+        res["ulva_ha_s%03d" % round(s * 100)] = float(
+            (valide & peut_etre_ulve & (ndvi > s)).sum() * HA_PAR_PIXEL)
     return res
 
 
