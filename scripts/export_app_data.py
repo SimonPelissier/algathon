@@ -28,6 +28,19 @@ agg = (no3.groupby(["code_station", "year"])
           .agg(no3=("resultat", "median"), n=("resultat", "size"),
                lon=("longitude", "first"), lat=("latitude", "first")).reset_index())
 agg.to_parquet(dst / "no3_station_year.parquet", index=False)
+no3["month"] = no3["date"].dt.month
+aggm = (no3.groupby(["code_station", "year", "month"])
+           .agg(no3=("resultat", "median"), lon=("longitude", "first"), lat=("latitude", "first")).reset_index())
+aggm.to_parquet(dst / "no3_station_month.parquet", index=False)
+
+# météo mensuelle par plage (NASA POWER)
+w = pd.read_parquet(src / "regional/weather.parquet")
+w["year"], w["month"] = w["date"].dt.year, w["date"].dt.month
+wm = (w.groupby(["site", "year", "month"])
+       .agg(temp=("temperature_2m_mean", "mean"), precip=("precipitation_sum", "sum"),
+            wind=("wind_speed_10m_max", "mean"), storm_days=("wind_speed_10m_max", lambda x: int((x >= 55).sum())))
+       .reset_index())
+wm.to_parquet(dst / "weather_site_month.parquet", index=False)
 
 # élevages : position et type seulement (pas de raison sociale)
 lv = pd.read_csv(src / "regional/livestock_icpe.csv")

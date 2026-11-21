@@ -108,13 +108,15 @@ def sector_hydro(bbox, start, end, rivers=None, verbose=True) -> tuple[pd.DataFr
             flows[s["code_station"]] = q.set_index("date")["flow_m3s"]
             st.loc[st["code_station"] == s["code_station"], "mean_flow"] = q["flow_m3s"].mean()
             st.loc[st["code_station"] == s["code_station"], "n_days"] = len(q)
+    if "mean_flow" not in st:  # aucune station de débit exploitable (ex. Guissény)
+        st["mean_flow"] = float("nan")
     st = st.dropna(subset=["mean_flow"])
     keep = st.sort_values("mean_flow").groupby("libelle_cours_eau").tail(1)
     if verbose:
         print(f"  {len(keep)} stations de débit retenues : {', '.join(keep['libelle_station'])}")
 
     days = pd.date_range(start, end, freq="D")
-    q = pd.DataFrame({c: flows[c] for c in keep["code_station"]}).reindex(days)
+    q = pd.DataFrame({c: flows[c] for c in keep["code_station"]}, index=days).reindex(days)
     out = pd.DataFrame(index=days)
     out["flow_m3s"] = q.sum(axis=1, min_count=1)
     out["n_flow_stations"] = q.notna().sum(axis=1)

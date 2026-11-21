@@ -4,6 +4,7 @@
   python scripts/fetch_s2.py --backend gee --project MON_PROJET  # Google Earth Engine
 """
 import argparse
+import time
 
 import pandas as pd
 from _common import ROOT
@@ -41,16 +42,25 @@ for name, sec in cfg["sectors"].items():
             parts.append(pd.read_csv(part, parse_dates=["date"]))
             continue
         print(f"[{name}] {args.backend} {y0} -> {y1}", flush=True)
-        try:
-            if args.backend == "cdse":
-                df = s2.fetch_cdse(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"],
-                                   ROOT / "data/raw/s2" / name / str(y))
-            else:
-                if not args.project:
-                    ap.error("--project requis pour gee")
-                df = s2.fetch_gee(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"], args.project)
-        except Exception as e:  # on continue avec les autres années
-            print(f"  ECHEC {name} {y}: {e!r}", flush=True)
+        df = None
+        for attempt in range(6):  # 429 = trop de calculs simultanés chez Copernicus -> on patiente
+            try:
+                if args.backend == "cdse":
+                    df = s2.fetch_cdse(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"],
+                                       ROOT / "data/raw/s2" / name / str(y))
+                else:
+                    if not args.project:
+                        ap.error("--project requis pour gee")
+                    df = s2.fetch_gee(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"], args.project)
+                break
+            except Exception as e:
+                if "429" in repr(e) and attempt < 5:
+                    print(f"  {name} {y} : 429, nouvelle tentative dans {60 * (attempt + 1)} s", flush=True)
+                    time.sleep(60 * (attempt + 1))
+                    continue
+                print(f"  ECHEC {name} {y}: {e!r}", flush=True)
+                break
+        if df is None:  # on continue avec les autres années
             continue
         df = s2.finalize(df)
         df.insert(0, "sector", name)

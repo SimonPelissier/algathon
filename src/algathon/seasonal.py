@@ -244,8 +244,13 @@ def hindcast(bundle: dict, t: pd.DataFrame, years) -> pd.DataFrame:
     return pd.concat(out)
 
 
-def predict_scenario(bundle: dict, scenario: str, r_no3: float = 0.0, r_lv: float = 0.0) -> pd.DataFrame:
-    """Prévision pour l'année cible : scénario météo/débits + variation des nitrates et des élevages (%)."""
+def predict_scenario(bundle: dict, scenario: str, r_no3: float = 0.0, r_lv: float = 0.0,
+                     prev_anom: pd.Series | None = None, std_factor: float = 1.0) -> pd.DataFrame:
+    """Prévision pour l'année cible : scénario météo/débits + variation des nitrates et des élevages (%).
+
+    prev_anom : écart de l'année précédente (par défaut : estimation 2026) ; pour 2028, l'écart prévu en 2027.
+    std_factor : élargit la fourchette (horizon plus lointain).
+    """
     m, hist, means = bundle["model"], bundle["site_hist"], bundle["site_means"]
     last, lv = bundle["last_obs"], bundle["n_elevages"]
     X = pd.DataFrame({"site": hist.index, "site_hist": hist.values})
@@ -260,10 +265,10 @@ def predict_scenario(bundle: dict, scenario: str, r_no3: float = 0.0, r_lv: floa
     q_sp = X["site"].map(means["q_spring"]) + X["q_spring_a"]
     X["nflux_spring_a"] = (X["site"].map(last["no3_spring"]) * factor * q_sp
                            - X["site"].map(means["nflux_spring"])).fillna(0.0)
-    X["prev_anom"] = X["site"].map(bundle["prev_anom"]).fillna(0.0)
+    X["prev_anom"] = X["site"].map(bundle["prev_anom"] if prev_anom is None else prev_anom).fillna(0.0)
     pred_log = X["site_hist"] + m.predict(X[FEATURES])
-    s = bundle["resid_std_log"]
-    return pd.DataFrame({"site": X["site"], "ha": np.expm1(pred_log).clip(0),
+    s = bundle["resid_std_log"] * std_factor
+    return pd.DataFrame({"site": X["site"], "ha": np.expm1(pred_log).clip(0), "pred_log": pred_log.values,
                          "ha_lo": np.expm1(pred_log - s).clip(0), "ha_hi": np.expm1(pred_log + s).clip(0),
                          "facteurs": top_factors(_contributions(m, X)).values,
                          "nitrate_factor": factor.values})
