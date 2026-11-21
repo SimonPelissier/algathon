@@ -3,6 +3,10 @@ pandas>=2.0
 scikit-learn>=1.4
 pyyaml>=6.0
 pytest>=7.0
+# Ingestion (CEVA, Hub'Eau, Open-Meteo) et exploration
+requests>=2.28
+matplotlib>=3.5
+jupyter
 # Ingestion satellite (étape suivante)
 # earthengine-api
 # openeo
