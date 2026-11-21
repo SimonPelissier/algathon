@@ -35,6 +35,45 @@ METEO_MONTH = {"precip": ("Pluie du mois", "mm"), "temp": ("Température du mois
 WARM = {"sp_temp", "w_temp", "autumn_temp", "w_storm_days", "temp", "storm_days", "wind"}
 
 st.set_page_config(page_title="Observatoire des marées vertes", page_icon="🌊", layout="wide")
+st.markdown("""
+<style>
+/* ---------- en-tête ---------- */
+.hero {background: linear-gradient(120deg, #0B4F5C 0%, #0E8A6E 55%, #7BC67B 100%); color: #fff;
+       border-radius: 22px; padding: 26px 30px 22px; margin: -8px 0 18px; position: relative; overflow: hidden;
+       box-shadow: 0 10px 30px rgba(11, 79, 92, .18);}
+.hero::after {content: ""; position: absolute; right: -60px; bottom: -90px; width: 360px; height: 220px;
+       border-radius: 50%; background: radial-gradient(closest-side, rgba(255,255,255,.22), transparent); }
+.hero-kicker {text-transform: uppercase; letter-spacing: .14em; font-size: .74rem; opacity: .85; font-weight: 600;}
+.hero-title {font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800; font-size: 2.55rem; line-height: 1.05;
+       margin: 6px 0 8px; letter-spacing: -.02em;}
+.hero-sub {font-size: 1.02rem; max-width: 820px; opacity: .95;}
+/* ---------- cartes de chiffres ---------- */
+.cards {display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 16px;}
+.card {background: #fff; border-radius: 18px; padding: 16px 18px; border: 1px solid #E4EDE8;
+       box-shadow: 0 2px 10px rgba(16, 49, 43, .05); border-top: 5px solid #0E8A6E;}
+.card.hot {border-top-color: #C8102E;} .card.warm {border-top-color: #F08A24;} .card.info {border-top-color: #2B6CB0;}
+.card.up .card-note {color: #B42318;} .card.down .card-note {color: #0E8A6E;}
+.card-label {font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: #4A6B63; font-weight: 600;}
+.card-value {font-family: 'Bricolage Grotesque', sans-serif; font-size: 2.1rem; font-weight: 800; color: #10312B;
+       line-height: 1.15; margin: 4px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;}
+.card-note {font-size: .82rem; color: #4A6B63;}
+.card.info .card-value {font-size: 1.35rem; white-space: normal; line-height: 1.2; margin: 8px 0 6px;}
+/* ---------- barre latérale et curseurs ---------- */
+section[data-testid="stSidebar"] h1 {font-family: 'Bricolage Grotesque', sans-serif; font-weight: 800;
+       color: #0B4F5C; letter-spacing: -.01em;}
+div[data-baseweb="slider"] div[role="slider"] {width: 22px; height: 22px; background: #fff;
+       border: 4px solid #0E8A6E; box-shadow: 0 2px 8px rgba(14, 138, 110, .35);}
+div[data-baseweb="slider"] > div > div {height: 7px; border-radius: 6px;}
+div[data-testid="stSliderThumbValue"] {font-weight: 700; color: #0B4F5C;}
+/* ---------- onglets ---------- */
+div[data-baseweb="tab-list"] {gap: 6px;}
+button[data-baseweb="tab"] {background: #EEF5F1; border-radius: 999px; padding: 6px 16px; border: none;}
+button[data-baseweb="tab"][aria-selected="true"] {background: #0E8A6E; color: #fff;}
+button[data-baseweb="tab"][aria-selected="true"] p {color: #fff;}
+div[data-baseweb="tab-highlight"], div[data-baseweb="tab-border"] {display: none;}
+/* ---------- tableaux ---------- */
+div[data-testid="stDataFrame"] {border-radius: 14px; overflow: hidden; border: 1px solid #E4EDE8;}
+</style>""", unsafe_allow_html=True)
 
 
 # ----------------------------------------------------------------------------- données
@@ -351,18 +390,29 @@ v["risque"], v["color"] = zip(*v["ha"].map(lambda h: risk_of(h, scale)))
 v = v.sort_values("ha", ascending=False)
 hist_total = typical.sum()
 
-st.title("Observatoire des marées vertes")
-unit_txt = (f"surface d'ulves présente en moyenne en {month} {year} (ha)" if m_idx
-            else f"surface cumulée d'ulves par plage en {year} (ha/an)")
-st.caption("Bretagne et façade atlantique · " + unit_txt)
+unit_txt = (f"surface d'ulves présente en moyenne en {month} {year}" if m_idx
+            else f"surface cumulée d'ulves par plage en {year}")
+src_txt = v["source"].mode().iloc[0]
+when_txt = (f"{month} {year}" if m_idx else str(year))
+st.markdown(f"""
+<div class="hero">
+  <div class="hero-kicker">Bretagne · façade atlantique · {'prévision' if year >= FORECAST_YEAR else 'observé / estimé'}</div>
+  <div class="hero-title">Observatoire des marées vertes</div>
+  <div class="hero-sub">Où les ulves vont-elles s'échouer, et pourquoi ? Satellite, rivières, météo et marées réunis
+  sur une même carte — <b>{when_txt}</b>.</div>
+</div>""", unsafe_allow_html=True)
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Surface présente (moyenne du mois)" if m_idx else "Surface cumulée totale",
-          f"{v['ha'].sum():,.0f} ha".replace(",", " "),
-          f"{(v['ha'].sum() / hist_total - 1) * 100:+.0f} % vs " + ("même mois, année typique" if m_idx else "année typique"))
-c2.metric("Plages à risque très élevé", int((v["risque"] == "Très élevé").sum()))
-c3.metric("Plages à risque élevé", int((v["risque"] == "Élevé").sum()))
-c4.metric("Source", v["source"].mode().iloc[0])
+delta = (v["ha"].sum() / hist_total - 1) * 100
+cards = [
+    ("Surface d'ulves" + (" (moy. du mois)" if m_idx else " cumulée"), f"{v['ha'].sum():,.0f} ha".replace(",", " "),
+     f"{delta:+.0f} % vs " + ("même mois, année typique" if m_idx else "année typique"), "up" if delta > 0 else "down"),
+    ("Plages en risque très élevé", str(int((v["risque"] == "Très élevé").sum())), "≥ 50 ha cumulés / an", "hot"),
+    ("Plages en risque élevé", str(int((v["risque"] == "Élevé").sum())), "15 à 50 ha cumulés / an", "warm"),
+    ("Source des chiffres", src_txt.split(" (")[0], unit_txt, "info"),
+]
+st.markdown('<div class="cards">' + "".join(
+    f'<div class="card {k}"><div class="card-label">{a}</div><div class="card-value">{b}</div>'
+    f'<div class="card-note">{c}</div></div>' for a, b, c, k in cards) + "</div>", unsafe_allow_html=True)
 
 dv = None
 if day is not None:

@@ -1,0 +1,14 @@
+[theme]
+base = "light"
+primaryColor = "#0E8A6E"            # vert algue : curseurs, cases cochées, onglet actif
+backgroundColor = "#FBF8F1"         # sable clair
+secondaryBackgroundColor = "#EEF5F1"
+textColor = "#10312B"               # vert très sombre (plutôt que noir)
+font = "'DM Sans':https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400&display=swap"
+headingFont = "'Bricolage Grotesque':https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap"
+baseRadius = "large"
+showSidebarBorder = false
+
+[theme.sidebar]
+backgroundColor = "#E3F0EA"
+secondaryBackgroundColor = "#D3E8DE"
