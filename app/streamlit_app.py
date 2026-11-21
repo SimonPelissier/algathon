@@ -91,7 +91,7 @@ D, M = load(), load_model()
 
 st.sidebar.title("🌊 Marées vertes")
 year = st.sidebar.slider("Année", FIRST_YEAR, FORECAST_YEAR, FORECAST_YEAR)
-scenario, r_no3, r_lv = "Hiver médian", 0, 0
+scenario, r_no3, r_lv = next(iter(M["scenarios"])), 0, 0
 if year == FORECAST_YEAR:
     st.sidebar.markdown("**Scénarios 2027**")
     scenario = st.sidebar.radio("Hiver 2026-2027", list(M["scenarios"]), index=0)
@@ -104,7 +104,8 @@ show_lv = st.sidebar.checkbox("Densité d'élevages (ICPE)", False)
 show_flux = st.sidebar.checkbox("Flux de nitrates — baies pilotes", True)
 
 v = year_values(D, M, year, scenario, r_no3, r_lv)
-hist_total = D["ceva"].groupby("year")["cumul_ha"].sum().mean()
+typical = np.expm1(M["site_hist"])  # année typique de chaque plage (médiane géométrique 2002-2022)
+hist_total = typical.sum()
 
 st.title("Observatoire des marées vertes")
 st.caption("Bretagne et façade atlantique · surfaces cumulées d'ulves par plage (ha/an) · "
@@ -112,7 +113,7 @@ st.caption("Bretagne et façade atlantique · surfaces cumulées d'ulves par pla
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Surface cumulée totale", f"{v['ha'].sum():,.0f} ha".replace(",", " "),
-          f"{(v['ha'].sum() / hist_total - 1) * 100:+.0f} % vs moyenne 2002-2022")
+          f"{(v['ha'].sum() / hist_total - 1) * 100:+.0f} % vs année typique")
 c2.metric("Plages à risque très élevé", int((v["risque"] == "Très élevé").sum()))
 c3.metric("Plages à risque élevé", int((v["risque"] == "Élevé").sum()))
 c4.metric("Source", v["source"].iloc[0])
@@ -162,7 +163,7 @@ if show_sites:
 
 st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=45),
-                         tooltip={"text": "{label}"}), use_container_width=True, height=560)
+                         tooltip={"text": "{label}"}), width="stretch", height=560)
 st.caption("Colonnes : surface cumulée d'ulves par plage · points : nitrates médians des rivières "
            "(bleu < 10 mg/L → rouge > 50 mg/L) · arcs : rivières → baies pilotes (épaisseur ∝ flux).")
 
@@ -171,10 +172,11 @@ tab1, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📈 Détail d'une pl
 
 with tab1:
     show = v[["site", "secteur", "dep", "ha", "ha_lo", "ha_hi", "risque", "facteurs"]].copy()
-    show["moyenne 2002-2022"] = show["site"].map(D["ceva"].groupby("site")["cumul_ha"].mean())
+    show["année typique"] = show["site"].map(typical)
+    show["écart vs typique"] = (show["ha"] / show["année typique"] - 1).mul(100).round(0).astype("Int64").astype(str) + " %"
     show = show.rename(columns={"ha": "surface (ha)", "ha_lo": "bas", "ha_hi": "haut", "dep": "dép.",
                                 "facteurs": "principaux facteurs (effet sur log-surface)"})
-    st.dataframe(show.round(1), use_container_width=True, hide_index=True, height=420)
+    st.dataframe(show.round(1), width="stretch", hide_index=True, height=420)
     st.download_button("Télécharger la liste (CSV)", show.to_csv(index=False).encode("utf-8"),
                        f"plages_ciblees_{year}.csv", "text/csv")
 

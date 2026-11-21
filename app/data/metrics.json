@@ -1,0 +1,17 @@
+{
+  "r2_log_model": 0.7669653947856181,
+  "r2_log_baseline_site_mean": 0.7517783324133873,
+  "corr_anomalies": 0.2477970038113402,
+  "corr_regional_years": 0.17858062911577227,
+  "spearman_sites_per_year": 0.756324922408346,
+  "resid_std_log": 0.6724520679970807,
+  "n": 1954,
+  "coefficients": {
+    "prev_anom": 0.1391259070281342,
+    "sp_temp_a": 0.07901178330344266,
+    "autumn_temp_a": -0.07253556514882584,
+    "nflux_spring_a": 0.058373419497253366,
+    "q_spring_a": -0.01278671691027685
+  },
+  "livestock_elasticity": 0.16257133302441681
+}

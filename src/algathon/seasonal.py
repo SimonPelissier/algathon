@@ -29,7 +29,11 @@ WEATHER = ["w_temp", "w_precip", "w_storm_days", "w_rad", "autumn_temp",
            "sp_temp", "sp_precip", "sp_rad", "sp_wind"]
 HYDRO = ["q_winter", "q_spring", "no3_winter", "no3_spring", "nflux_spring"]
 DYNAMIC = WEATHER + HYDRO
-FEATURES = [f + "_a" for f in DYNAMIC] + ["prev_anom"]
+# Sélection par validation croisée (une année laissée de côté) : avec 21 années, les 15 variables
+# sur-apprennent ; seul le report a un effet robuste (corr. des écarts ~0.25). On garde en plus le flux
+# de nitrates, le débit et les températures de printemps/automne (meilleur score régional, 0.18),
+# ce qui permet les scénarios « nitrates ». La météo d'hiver (MERRA-2, ~50 km) n'apportait rien.
+FEATURES = ["prev_anom", "nflux_spring_a", "q_spring_a", "sp_temp_a", "autumn_temp_a"]
 LABELS = {
     "w_temp": "T° hiver", "w_precip": "pluie hiver", "w_storm_days": "coups de vent hiver",
     "w_rad": "ensoleillement hiver", "autumn_temp": "T° automne précédent", "sp_temp": "T° printemps",
