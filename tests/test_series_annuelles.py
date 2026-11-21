@@ -54,3 +54,18 @@ def test_plis_sans_fuite():
         assert test not in train and test + 1 not in train   # N+1 porte la cible de N
     for train, test in plis_glissants(annees):
         assert max(train) < test
+
+
+def test_modeles_par_defaut_et_validation_glissante():
+    from algathon.baseline_annuel import evaluer, fabriquer_modeles
+    assert {"ridge", "random_forest", "extra_trees"} <= set(fabriquer_modeles())
+    rng = np.random.default_rng(0)
+    lignes = []
+    for b in ("a", "b"):
+        for an in range(2002, 2016):
+            lignes.append({"baie": b, "annee": an, "surface_ha": rng.uniform(10, 100),
+                           "surface_n_1": rng.uniform(10, 100), "debit_jan_avr": 1.0})
+    pred = evaluer(pd.DataFrame(lignes), ["surface_n_1", "debit_jan_avr"])
+    assert {"pred_random_forest", "pred_extra_trees"} <= set(pred.columns)
+    assert pred["annee"].min() == 2010          # 8 années d'apprentissage minimum
+    assert (pred["pred_extra_trees"] >= 0).all()

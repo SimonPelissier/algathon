@@ -15,8 +15,7 @@ from typing import Dict
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import (ExtraTreesRegressor, HistGradientBoostingRegressor,
-                              RandomForestRegressor)
+from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel, WhiteKernel
 from sklearn.impute import SimpleImputer
@@ -26,6 +25,8 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import SplineTransformer, StandardScaler
 from sklearn.svm import SVR
+
+from .baseline_annuel import extra_trees, random_forest
 
 # famille de chaque modèle, pour l'affichage
 FAMILLES = {
@@ -61,10 +62,9 @@ def tous_les_modeles() -> Dict[str, object]:
         # GAM approché : chaque variable passe par une base de splines (effet courbe),
         # les effets s'additionnent, et la Ridge empêche les courbes trop tordues.
         "gam_splines": _prep(SplineTransformer(n_knots=4, degree=3), RidgeCV(alphas=np.logspace(-1, 4, 21))),
-        "random_forest": _prep(RandomForestRegressor(n_estimators=300, min_samples_leaf=5,
-                                                     max_features=0.5, random_state=0)),
-        "extra_trees": _prep(ExtraTreesRegressor(n_estimators=300, min_samples_leaf=5,
-                                                 max_features=0.5, random_state=0)),
+        # mêmes réglages que dans baseline_annuel (une seule définition)
+        "random_forest": random_forest(),
+        "extra_trees": extra_trees(),
         "gradient_boosting": HistGradientBoostingRegressor(
             max_depth=2, max_iter=150, learning_rate=0.05, min_samples_leaf=8,
             l2_regularization=1.0, random_state=0),

@@ -21,8 +21,10 @@ from typing import Dict, Iterator, List, Tuple
 
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.ensemble import (ExtraTreesRegressor, HistGradientBoostingRegressor,
+                              RandomForestRegressor)
 from sklearn.impute import SimpleImputer
+from sklearn.inspection import permutation_importance
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -76,19 +78,67 @@ def matrice(df: pd.DataFrame, variables: List[str], baies: List[str]) -> pd.Data
     return X
 
 
+def random_forest() -> object:
+    """Forêt aléatoire : 300 arbres entraînés chacun sur un tirage des lignes et une moitié
+    des variables, puis moyennés. Feuilles d'au moins 5 lignes (~140 lignes au total)."""
+    return make_pipeline(
+        SimpleImputer(strategy="median"),
+        RandomForestRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5,
+                              random_state=0),
+    )
+
+
+def extra_trees() -> object:
+    """Extra Trees : comme la forêt aléatoire, mais les seuils de coupure sont tirés au
+    hasard. Plus de diversité entre arbres, donc des prédictions plus lisses et moins de
+    surapprentissage sur petit jeu de données (meilleur modèle du benchmark)."""
+    return make_pipeline(
+        SimpleImputer(strategy="median"),
+        ExtraTreesRegressor(n_estimators=300, min_samples_leaf=5, max_features=0.5,
+                            random_state=0),
+    )
+
+
 def fabriquer_modeles() -> Dict[str, object]:
     return {
+        # référence linéaire, lisible (effet de chaque variable = un coefficient)
         "ridge": make_pipeline(
             SimpleImputer(strategy="median"),
             StandardScaler(),
             RidgeCV(alphas=np.logspace(-2, 3, 21)),
         ),
-        # arbres très peu profonds : ~150 lignes d'entraînement seulement
+        # modèles non linéaires retenus après le benchmark (scripts/benchmark_modeles.py)
+        "random_forest": random_forest(),
+        "extra_trees": extra_trees(),
+        # boosting gardé pour comparaison : moins bon sur ~140 lignes
         "gradient_boosting": HistGradientBoostingRegressor(
             max_depth=2, max_iter=150, learning_rate=0.05,
             min_samples_leaf=8, l2_regularization=1.0, random_state=0,
         ),
     }
+
+
+def importance_hors_echantillon(table: pd.DataFrame, variables: List[str], nom_modele: str,
+                                n_repetitions: int = 10) -> pd.Series:
+    """Importance par permutation, mesurée sur chaque année laissée de côté (plis loyo).
+
+    Pour chaque année : on entraîne sans elle (ni N+1), on mélange une variable dans
+    l'année testée et on mesure la hausse d'erreur. Les indicatrices de baie sont
+    regroupées en « baie (niveau propre) ». Renvoie des % (somme des parts positives = 100).
+    """
+    df = table.dropna(subset=[CIBLE])
+    baies = sorted(df["baie"].unique())
+    X, y = matrice(df, variables, baies), np.log1p(df[CIBLE].values)
+    parts = []
+    for annees_train, annee_test in plis_loyo(df["annee"].tolist()):
+        tr, te = df["annee"].isin(annees_train).values, (df["annee"] == annee_test).values
+        modele = fabriquer_modeles()[nom_modele].fit(X[tr], y[tr])
+        pi = permutation_importance(modele, X[te], y[te], n_repeats=n_repetitions,
+                                    random_state=0, scoring="neg_mean_absolute_error")
+        parts.append(pd.Series(pi.importances_mean, index=X.columns))
+    imp = pd.concat(parts, axis=1).mean(axis=1)
+    imp = imp.groupby(lambda c: "baie (niveau propre)" if c.startswith("baie_") else c).sum()
+    return (100 * imp / imp.clip(lower=0).sum()).sort_values(ascending=False)
 
 
 def evaluer(table: pd.DataFrame, variables: List[str], methode: str = "glissante",
