@@ -24,6 +24,10 @@ periode:
   debut_donnees: "2001-01-01"   # on charge 2001 pour avoir la valeur N-1 de 2002
   annee_min: 2002
   annee_max: 2022               # dernière année publiée par le CEVA
+  # Surfaces CEVA inférieures à 5 % de la moyenne de la baie : traitées comme manquantes.
+  # Ce sont des zéros qui ressemblent à des données absentes (Fresnaye 2006 et 2010-2014,
+  # Douarnenez 2018 et 2022) ; voir data/README.md.
+  part_min_ceva: 0.05
 
 saisons:
   prevision_jan_avr: [1, 2, 3, 4]      # connu avant la saison : prévision au 1er mai

@@ -82,6 +82,8 @@ pytest tests/
 | `src/algathon/detection/` | surfaces d'ulves Sentinel-2 par scène (`sentinel2.py`), choix de la scène de basse mer et comparaison au CEVA (`calibration.py`) |
 | `notebooks/02_detection_sentinel2.ipynb` | disponibilité des scènes, effet de la marée, calibration du seuil NDVI |
 | `src/algathon/detection/affinage.py`, `scripts/affiner_s2.py` | exclusion des algues fixées et du liseré côtier, cartes de fréquence |
+| `scripts/prevision_5j_experimentale.py` | expérimental : prévision tous les 5 jours (image claire + marée prévue + météo), cumuls comparés au CEVA |
+| `notebooks/05_prevision_5j.ipynb` | qualité de la prévision à 5 jours, saison 2019, cumuls de saison contre CEVA ; houle hivernale testée et écartée |
 | `notebooks/03_cartes_et_evolutions.ipynb` | carte des baies et stations, cartes d'échouage, saisonnalité, série 2002-2025, écarts au CEVA |
 | `data/README.md` | sources, formats, périodes, comment régénérer les données |
 

@@ -8,6 +8,8 @@ data/raw/sentinel2/pixels/), puis écrit dans data/processed/ :
   s2_mensuel_corrige.csv   une scène par baie et par mois (avril-octobre), surfaces corrigées
   s2_annuel_corrige.csv    cumul des fenêtres de survol CEVA (± 15 j), avec la surface CEVA
   s2_cartes/<baie>.npz     fréquence de détection par pixel, masques d'exclusion
+  s2_scenes_claires_corrige.csv   (option --toutes-claires) toutes les images claires, surfaces
+                           corrigées avec les masques ci-dessus : série pour la prévision à 5 jours
 """
 import argparse
 import json
@@ -42,6 +44,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--baies", nargs="*")
+    ap.add_argument("--toutes-claires", action="store_true",
+                    help="corrige aussi toutes les images claires (~900, environ 5 min la 1re fois)")
     args = ap.parse_args()
 
     conf = yaml.safe_load(open(RACINE / "configs" / "detection.yaml", encoding="utf-8"))
@@ -53,7 +57,7 @@ def main():
     mensuel = cal.selection_basse_mer(scenes, sel["part_valide_min"])
     fenetres = cal.selection_fenetres(scenes, sel["mois_ceva"], sel["tolerance_jours"],
                                       sel["part_valide_min"])
-    sorties_m, sorties_f = [], []
+    sorties_m, sorties_f, sorties_c = [], [], []
     for code, baie in baies.items():
         if args.baies and code not in args.baies:
             continue
@@ -92,6 +96,20 @@ def main():
                                                 conf["seuils_ndvi"]) for i in table["id"]]
             sorties.append(pd.concat([table.reset_index(drop=True), pd.DataFrame(corr)], axis=1))
 
+        if args.toutes_claires:
+            claires = scenes[(scenes["baie"] == code) & (scenes["zone_ha"] > 0)]
+            claires = claires[claires["valid_ha"] / claires["zone_ha"] >= sel["part_valide_min"]]
+            claires = claires.sort_values("valid_ha").drop_duplicates("date", keep="last")
+            with ThreadPoolExecutor(max_workers=args.workers) as pool:
+                px_c = dict(pool.map(lire, [i for i in claires["id"] if i not in pixels]))
+            px_c.update(pixels)
+            corr = [affinage.surfaces_corrigees(px_c[i], cartes["exclusion"], cartes["ref"],
+                                                conf["seuils_ndvi"]) for i in claires["id"]]
+            sorties_c.append(pd.concat([claires.reset_index(drop=True), pd.DataFrame(corr)], axis=1))
+            print("[%s] %d images claires corrigées" % (code, len(claires)), flush=True)
+
+    if args.toutes_claires:
+        pd.concat(sorties_c, ignore_index=True).to_csv(PROC / "s2_scenes_claires_corrige.csv", index=False)
     mensuel_c = pd.concat(sorties_m, ignore_index=True)
     fenetres_c = pd.concat(sorties_f, ignore_index=True)
     mensuel_c.to_csv(PROC / "s2_mensuel_corrige.csv", index=False)

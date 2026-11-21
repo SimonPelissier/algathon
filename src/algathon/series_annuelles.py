@@ -181,6 +181,12 @@ def table_annuelle(config: dict = None, force: bool = False) -> pd.DataFrame:
         tables.append(t)
 
     table = pd.concat(tables, ignore_index=True).sort_values(["baie", "annee"])
+    # règle de qualité : une surface CEVA quasi nulle est traitée comme manquante
+    part_min = config["periode"].get("part_min_ceva")
+    if part_min:
+        moyenne = table.groupby("baie")["surface_ha"].transform("mean")
+        table["ceva_quasi_nul"] = table["surface_ha"] < part_min * moyenne
+        table.loc[table["ceva_quasi_nul"], "surface_ha"] = np.nan
     # variables « année précédente » : connues avant la saison
     g = table.groupby("baie")
     table["surface_n_1"] = g["surface_ha"].shift(1)
