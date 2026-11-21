@@ -19,6 +19,7 @@ Aucun compte ni aucune clé n'est nécessaire. Le cache pèse environ 9 Mo.
 | `ceva/enquete_communale_AV_bretagne.geojson` | CEVA via WFS GéoSAS, couche `greenseas:enquete_communale_AV_bretagne` | 279 communes, champs `VOL_1997` … `VOL_2022` | 1997-2022 | Volume ramassé par commune et par an, en m³ |
 | `hubeau/debits/<station>_QmnJ.json` | Hub'Eau hydrométrie, `obs_elab`, grandeur QmnJ | Débit moyen journalier (l/s dans le fichier) | 2001 → date du téléchargement | Journalier |
 | `hubeau/nitrates/<station>_NO3.json` | Hub'Eau qualité des cours d'eau, `analyse_pc`, paramètre Sandre 1340 | Concentrations en nitrates, mg(NO3)/L | 2001 → date du téléchargement, selon la station | 15 à 25 prélèvements par an |
+| `houle/era5_<lat>_<lon>.json` | Open-Meteo Marine, réanalyse ERA5 des vagues (`models=era5_ocean`), point au large de chaque baie (maille 0,5°) | Hauteur significative maximale et période des vagues | 2001 → J-7 | Journalier |
 | `meteo/openmeteo_<lat>_<lon>.json` | Open-Meteo Archive (réanalyse ERA5) | Température moyenne, rayonnement global, pluie | 2001 → J-7 | Journalier |
 
 Liens directs :
@@ -48,6 +49,8 @@ donnée sur GéoSAS.
   | `flux_n_<fenêtre>_t` | flux d'azote nitrique, t N |
   | `ray_*`, `temp_*`, `pluie_*` | rayonnement (MJ/m², cumul), température (°C, moyenne), pluie (mm, cumul) |
   | `debit_proxy` | `True` si le débit vient d'un bassin voisin (Guissény) |
+  | `houle_hiver_moy`, `jours_houle_25/35/45` | houle de l'hiver précédent (novembre-mars) au large : moyenne de la houle maximale journalière (m) et nombre de jours au-dessus de 2,5 / 3,5 / 4,5 m (seuils du CEVA) |
+  | `ceva_quasi_nul` | `True` si la surface CEVA était inférieure à 5 % de la moyenne de la baie : elle est alors mise à vide (règle `part_min_ceva` de `configs/baies.yaml`) |
 
   Fenêtres : `jan_avr` (connu au 1er mai, utilisable pour prévoir), `mai_aout` (la saison
   elle-même), `mars_avr` et `mars_mai` pour la météo.
@@ -61,6 +64,10 @@ donnée sur GéoSAS.
 - `s2_mensuel_corrige.csv`, `s2_annuel_corrige.csv` : mêmes séries après affinage pixel par pixel
   (`scripts/affiner_s2.py`) : végétation fixée, récifs découverts aux grandes marées et liseré
   côtier exclus ; fenêtres de ± 15 jours autour des mois des survols CEVA. **Séries à utiliser.**
+- `s2_scenes_claires_corrige.csv` : les ~900 images claires (90 % de la zone sans nuage), surfaces
+  corrigées des algues fixées (`python scripts/affiner_s2.py --toutes-claires`, ~4 min la 1re fois).
+- `prevision_5j/<version>_sys5j_*.csv` : sorties expérimentales de `scripts/prevision_5j_experimentale.py`
+  (évaluation à J+5, courbes tous les 5 jours, cumuls comparés au CEVA).
 - `s2_cartes/<baie>.npz` : fréquence de détection par pixel (toutes années et par année),
   masques d'exclusion ; lus par le notebook 03.
 
@@ -84,7 +91,10 @@ une relance reprend où elle s'était arrêtée.
   des bassins versants. Ils servent à comparer les années entre elles, pas à faire un bilan.
 - Guissény : la station du Quillimadec est fermée depuis 1982 ; on utilise l'Aber Benoît comme substitut.
 - Douarnenez (Kerharo, depuis 2013) et Fresnaye (Frémur d'Hénanbihen, depuis 2010) ont des débits courts.
-- Valeurs CEVA à vérifier : Fresnaye à 0 ha en 2006 et de 2010 à 2014 ; beaucoup de sites à 0 en 2022.
+- Valeurs CEVA à vérifier : Fresnaye à 0 ha en 2006 et de 2010 à 2014 ; Douarnenez à 0 ha en 2018 et 3 ha en 2022 ;
+  beaucoup de sites à 0 en 2022. Les surfaces inférieures à 5 % de la moyenne de la baie sont traitées comme
+  manquantes. Piste pour la Fresnaye : la baie est envahie par *Ulvaria* (bulletin CEVA 2020), peut-être non
+  comptée comme ulve.
 
 ## Dépannage
 
