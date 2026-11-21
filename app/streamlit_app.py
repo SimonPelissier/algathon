@@ -213,11 +213,17 @@ year = st.sidebar.slider("Année", FIRST_YEAR, LAST_YEAR, FORECAST_YEAR)
 month = st.sidebar.select_slider("Mois", MONTHS, value="Année entière")
 m_idx = MONTHS.index(month)  # 0 = année entière
 day = None
-if m_idx and year >= 2017 and D["daily"] is not None:
-    nd = pd.Timestamp(year, m_idx, 1).days_in_month
-    dsel = st.sidebar.select_slider("Jour (baies pilotes)", ["Mois entier"] + list(range(1, nd + 1)), value="Mois entier")
-    if dsel != "Mois entier":
-        day = pd.Timestamp(year, m_idx, dsel)
+if D["daily"] is not None:
+    if m_idx and year >= 2017:
+        nd = pd.Timestamp(year, m_idx, 1).days_in_month
+        dsel = st.sidebar.select_slider("📅 Jour (baies pilotes)", ["Mois entier"] + list(range(1, nd + 1)),
+                                        value="Mois entier")
+        if dsel != "Mois entier":
+            day = pd.Timestamp(year, m_idx, dsel)
+    else:
+        st.sidebar.select_slider("📅 Jour (baies pilotes)", ["Mois entier", "—"], value="Mois entier", disabled=True)
+        st.sidebar.caption("👆 Choisissez un **mois**" + (" et une année ≥ 2017" if year < 2017 else "")
+                           + " pour naviguer jour par jour.")
 scenario, r_no3, r_lv = next(iter(M["scenarios"])), 0, 0
 if year >= FORECAST_YEAR:
     st.sidebar.markdown("**Scénarios 2027-2028**")
@@ -267,7 +273,8 @@ if day is not None:
                    "(calculé), puis pour 2027-2028 (risque attendu).")
     else:
         dv = dv.merge(D["sites"][["site", "lon", "lat"]], on="site").sort_values("risque_h2s", ascending=False)
-        st.markdown(f"#### 📅 {day:%A %d/%m/%Y} — risque d'échouage et d'H₂S, plages des baies pilotes")
+        jour = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"][day.dayofweek]
+        st.markdown(f"#### 📅 {jour} {day:%d/%m/%Y} — risque d'échouage et d'H₂S, plages des baies pilotes")
         st.caption(dsrc + f" · coefficient de marée (Brest) : {dv['coef'].iloc[0]:.0f}")
         tab_d = pd.DataFrame({"plage": dv["site"], "niveau": dv["niveau"].map(lambda x: LEVEL_TXT.get(int(x), "")),
                               "indice": dv["risque_h2s"].round(1), "stock d'ulves (ha)": dv["stock_ha"].round(1),
