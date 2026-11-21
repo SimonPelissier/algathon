@@ -61,6 +61,31 @@ python scripts/train.py --config configs/default.yaml
 
 Sans données réelles, `train.py` génère un **jeu synthétique** pour tester le pipeline de bout en bout.
 
+## Marées vertes : prévision annuelle des échouages par baie
+
+Premier maillon réel du projet, sur des données publiques et sans aucune clé d'API.
+Les 7 baies suivies (Saint-Brieuc, Lieue de Grève, Fresnaye, Horn-Guillec, Guissény,
+Douarnenez, Concarneau et La Forêt-Fouesnant) sont décrites dans `configs/baies.yaml`.
+
+```bash
+python scripts/ingest.py           # télécharge CEVA, Hub'Eau, Open-Meteo dans data/raw/ (cache)
+python scripts/baseline_annuel.py  # Ridge et gradient boosting contre deux références naïves
+pytest tests/
+```
+
+| Fichier | Rôle |
+|---|---|
+| `src/algathon/ingestion/` | téléchargements avec cache : `ceva.py` (WFS GéoSAS), `hubeau.py` (débits, nitrates), `meteo.py` (Open-Meteo) |
+| `src/algathon/series_annuelles.py` | table baie × année : surface CEVA, volumes ramassés, débits, nitrates, flux d'azote, météo |
+| `src/algathon/baseline_annuel.py` | modèles et validation par année (leave-one-year-out et fenêtre glissante) |
+| `notebooks/01_exploration_annuelle.ipynb` | séries, corrélations, nombre de points par baie |
+| `data/README.md` | sources, formats, périodes, comment régénérer les données |
+
+Ce qu'il faut savoir : le CEVA ne publie qu'**une surface cumulée par site et par an**
+(2002-2022). On a donc environ 20 points par baie, d'où un modèle unique pour toutes les baies,
+validé uniquement par découpage temporel. Une prévision mensuelle demandera la détection
+satellite (Sentinel-2) pour obtenir des surfaces datées.
+
 ## Feuille de route
 
 - [x] Squelette du pipeline (indices, features, baseline, validation temporelle)
