@@ -7,7 +7,6 @@ Variables explicatives, calculées pour chaque baie :
       *_jan_avr   connu au 1er mai : utilisable pour une vraie prévision de saison
       *_mai_aout  pendant la saison : explique la saison, mais n'est pas connu à l'avance
   - météo (rayonnement, température, pluie) en mars-avril et en mars-mai
-  - houle de l'hiver précédent au large (moyenne, jours au-dessus de 2,5 / 3,5 / 4,5 m)
 
 Flux d'azote (t N) = somme sur les jours de Q (m³/s) × [NO3] (mg/L = g/m³) × 86 400 s
                      × 14/62 (passage de NO3 à N) / 1e6 (g → t).
@@ -23,7 +22,7 @@ import numpy as np
 import pandas as pd
 import yaml
 
-from .ingestion import ceva, houle, hubeau, meteo
+from .ingestion import ceva, hubeau, meteo
 
 RACINE = Path(__file__).resolve().parents[2]
 ECART_MAX_JOURS = 62          # au-delà, on n'interpole pas entre deux prélèvements
@@ -176,12 +175,6 @@ def table_annuelle(config: dict = None, force: bool = False) -> pd.DataFrame:
                 "pluie_" + nom: ("pluie_mm", "sum"),
             }).reset_index()
             t = t.merge(agg, on="annee", how="left")
-
-        # houle de l'hiver précédent (novembre Y-1 à mars Y), au large de la baie
-        if "houle" in baie:
-            hl = houle.houle_journaliere(baie["houle"]["lat"], baie["houle"]["lon"],
-                                         debut=debut, force=force)
-            t = t.merge(houle.indicateurs_hiver(hl, t["annee"].unique()), on="annee", how="left")
 
         t.insert(0, "baie", code)
         t["debit_proxy"] = any(r.get("debit_proxy", False) for r in baie["rivieres"])

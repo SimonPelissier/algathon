@@ -19,7 +19,6 @@ Aucun compte ni aucune clé n'est nécessaire. Le cache pèse environ 9 Mo.
 | `ceva/enquete_communale_AV_bretagne.geojson` | CEVA via WFS GéoSAS, couche `greenseas:enquete_communale_AV_bretagne` | 279 communes, champs `VOL_1997` … `VOL_2022` | 1997-2022 | Volume ramassé par commune et par an, en m³ |
 | `hubeau/debits/<station>_QmnJ.json` | Hub'Eau hydrométrie, `obs_elab`, grandeur QmnJ | Débit moyen journalier (l/s dans le fichier) | 2001 → date du téléchargement | Journalier |
 | `hubeau/nitrates/<station>_NO3.json` | Hub'Eau qualité des cours d'eau, `analyse_pc`, paramètre Sandre 1340 | Concentrations en nitrates, mg(NO3)/L | 2001 → date du téléchargement, selon la station | 15 à 25 prélèvements par an |
-| `houle/era5_<lat>_<lon>.json` | Open-Meteo Marine, réanalyse ERA5 des vagues (`models=era5_ocean`), point au large de chaque baie (maille 0,5°) | Hauteur significative maximale et période des vagues | 2001 → J-7 | Journalier |
 | `meteo/openmeteo_<lat>_<lon>.json` | Open-Meteo Archive (réanalyse ERA5) | Température moyenne, rayonnement global, pluie | 2001 → J-7 | Journalier |
 
 Liens directs :
@@ -49,7 +48,6 @@ donnée sur GéoSAS.
   | `flux_n_<fenêtre>_t` | flux d'azote nitrique, t N |
   | `ray_*`, `temp_*`, `pluie_*` | rayonnement (MJ/m², cumul), température (°C, moyenne), pluie (mm, cumul) |
   | `debit_proxy` | `True` si le débit vient d'un bassin voisin (Guissény) |
-  | `houle_hiver_moy`, `jours_houle_25/35/45` | houle de l'hiver précédent (novembre-mars) au large : moyenne de la houle maximale journalière (m) et nombre de jours au-dessus de 2,5 / 3,5 / 4,5 m (seuils du CEVA) |
   | `ceva_quasi_nul` | `True` si la surface CEVA était inférieure à 5 % de la moyenne de la baie : elle est alors mise à vide (règle `part_min_ceva` de `configs/baies.yaml`) |
 
   Fenêtres : `jan_avr` (connu au 1er mai, utilisable pour prévoir), `mai_aout` (la saison

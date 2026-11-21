@@ -1,9 +1,10 @@
 """EXPÉRIMENTAL — simulation d'un système de prévision à 5 jours (2017-2025) et comparaison au CEVA.
 
     python scripts/affiner_s2.py --toutes-claires        # surfaces corrigées de toutes les images claires
-    python scripts/prevision_5j_experimentale.py corrige_houle --maree <daily_risk.parquet>
+    python scripts/prevision_5j_experimentale.py corrige --maree <daily_risk.parquet>
 
-VERSION : brut (surfaces brutes) | corrige (algues fixées exclues) | corrige_houle (+ houle).
+VERSION : brut (surfaces brutes) | corrige (algues fixées exclues).
+La houle hivernale a été testée (ERA5) et retirée : aucun effet fiable (voir notebook 05).
 La marée prévue (hauteur d'eau à 11 h UTC, marégraphes SHOM) vient pour l'instant du fichier
 app/data/daily/daily_risk.parquet de la branche feature/daily-risk d'Allan (--maree) : à remplacer
 par un module d'ingestion commun quand les deux branches seront réunies.
@@ -18,7 +19,7 @@ Deux prévisions : surface visible au passage du satellite à t+5 ; surface déc
 import sys,warnings,numpy as np,pandas as pd
 import argparse
 from pathlib import Path
-_ap=argparse.ArgumentParser(); _ap.add_argument("version",choices=["brut","corrige","corrige_houle"])
+_ap=argparse.ArgumentParser(); _ap.add_argument("version",choices=["brut","corrige"])
 _ap.add_argument("--maree",required=True,help="daily_risk.parquet (branche feature/daily-risk)")
 _args=_ap.parse_args(); VERSION=_args.version
 warnings.filterwarnings("ignore"); sys.path.insert(0,str(Path(__file__).resolve().parents[1]/"src"))
@@ -28,7 +29,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.impute import SimpleImputer
 from algathon.series_annuelles import charger_config, serie_riviere
-from algathon.ingestion import meteo, hubeau, houle
+from algathon.ingestion import meteo, hubeau
 S=str(Path(__file__).resolve().parents[1]/"data"/"processed"/"prevision_5j")+"/"; Path(S).mkdir(parents=True,exist_ok=True)
 pd.set_option("display.width",230)
 conf=charger_config()
@@ -51,9 +52,7 @@ for b,cfg in conf["baies"].items():
     for r in cfg["rivieres"]:
         sr=serie_riviere(hubeau.debits_journaliers(r["debit"]),[hubeau.nitrates(x) for x in r["nitrates"]])
         q=sr.debit_m3s if q is None else q.add(sr.debit_m3s); f=sr.flux_kgN if f is None else f.add(sr.flux_kgN)
-    hl=houle.houle_journaliere(cfg["houle"]["lat"],cfg["houle"]["lon"]).set_index("date").houle_max_m
-    jour[b]=m.join(pd.DataFrame({"debit":q,"flux":f}),how="left").join(hl,how="left")
-HIVER={b:houle.indicateurs_hiver(houle.houle_journaliere(cfg["houle"]["lat"],cfg["houle"]["lon"]),range(2017,2027)).set_index("annee") for b,cfg in conf["baies"].items()}
+    jour[b]=m.join(pd.DataFrame({"debit":q,"flux":f}),how="left")
 NIV_BAS={b:maree[b].level_11utc_m[maree[b].index.month.isin(range(4,11))].quantile(0.10) for b in maree}
 
 def variables(b,t_img,ulve0,t_cible,niveau_cible=None):
@@ -64,9 +63,7 @@ def variables(b,t_img,ulve0,t_cible,niveau_cible=None):
             "coef1":M.coef.get(t_cible,np.nan),"horizon":(t_cible-t_img).days,
             "doy_sin":np.sin(2*np.pi*t_cible.dayofyear/365.25),"doy_cos":np.cos(2*np.pi*t_cible.dayofyear/365.25),
             "temp5":w5.temp_c.mean(),"ray5":w5.ray_mj_m2.sum(),"pluie5":w5.pluie_mm.sum(),
-            "debit10":np.log1p(w10.debit.mean()),"flux30":np.log1p(w30.flux.sum()/1000),
-            "houle5":w5.houle_max_m.mean(),"houle_hiver":HIVER[b].houle_hiver_moy.get(t_cible.year,np.nan),
-            "jours_houle_35":HIVER[b].jours_houle_35.get(t_cible.year,np.nan)}
+            "debit10":np.log1p(w10.debit.mean()),"flux30":np.log1p(w30.flux.sum()/1000)}
 # --- couples d'apprentissage : image i -> image j (3 à 20 jours plus tard)
 L=[]
 for b,g in c.groupby("baie"):
@@ -79,7 +76,7 @@ for b,g in c.groupby("baie"):
             L.append({"baie":b,"annee":g.date[j].year,"date0":g.date[i],"date1":g.date[j],"l_ulve1":np.log1p(g.ulve[j]),
                       **variables(b,g.date[i],g.ulve[i],g.date[j])})
 d=pd.DataFrame(L).dropna(subset=["niveau0","niveau1"])
-BAIES=sorted(c.baie.unique()); VARS=["l_ulve0","niveau0","niveau1","coef1","horizon","doy_sin","doy_cos","temp5","ray5","pluie5","debit10","flux30"]+(["houle5","houle_hiver","jours_houle_35"] if VERSION=="corrige_houle" else [])
+BAIES=sorted(c.baie.unique()); VARS=["l_ulve0","niveau0","niveau1","coef1","horizon","doy_sin","doy_cos","temp5","ray5","pluie5","debit10","flux30"]
 def X(df):
     x=df[VARS].copy()
     for b in BAIES: x["baie_"+b]=(df.baie==b).astype(float)
