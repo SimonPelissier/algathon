@@ -114,6 +114,12 @@ show_sites = st.sidebar.checkbox("Plages (surface d'ulves)", True)
 show_no3 = st.sidebar.checkbox("Nitrates des rivières", True)
 show_lv = st.sidebar.checkbox("Densité d'élevages (ICPE)", False)
 show_flux = st.sidebar.checkbox("Flux de nitrates — baies pilotes", True)
+show_meteo = st.sidebar.checkbox("Météo et débits de l'année", False)
+METEO = {"sp_precip": ("Pluie du printemps (avril-mai)", "mm"), "w_precip": ("Pluie de l'hiver (nov.-mars)", "mm"),
+         "q_spring": ("Débit des rivières au printemps", "× normale"), "sp_temp": ("Température du printemps", "°C"),
+         "w_temp": ("Température de l'hiver", "°C"), "w_storm_days": ("Jours de coup de vent en hiver", "jours"),
+         "autumn_temp": ("Température de l'automne précédent", "°C")}
+meteo_var = st.sidebar.selectbox("Variable météo", list(METEO), format_func=lambda c: METEO[c][0]) if show_meteo else None
 
 v = year_values(D, M, year, scenario, r_no3, r_lv)
 typical = np.expm1(M["site_hist"])  # année typique de chaque plage (médiane géométrique 2002-2022)
@@ -166,6 +172,29 @@ if show_flux and D["hydro"]:
                                 get_target_position=["to_lon", "to_lat"], get_width="flux / 400",
                                 get_source_color=[230, 120, 40, 220], get_target_color=[40, 150, 90, 220],
                                 pickable=True))
+if show_meteo:
+    t = D["table"]
+    clim = t[t["year"] <= LAST_OBS].groupby("site")[meteo_var].mean()
+    if year < FORECAST_YEAR:
+        mv = t[t["year"] == year][["site", "lon", "lat", meteo_var]].dropna().copy()
+        mv["anom"] = mv[meteo_var] - mv["site"].map(clim)
+    else:  # 2027 : écart du scénario choisi
+        mv = t.groupby("site")[["lon", "lat"]].first().reset_index()
+        mv["anom"] = mv["site"].map(pd.Series(M["scenarios"][scenario].get(meteo_var, {}))).fillna(0.0)
+        mv[meteo_var] = mv["site"].map(clim) + mv["anom"]
+    spread = t.groupby("site")[meteo_var].std().reindex(mv["site"]).values
+    z = np.clip(mv["anom"].values / np.where(spread > 0, spread, 1), -2, 2) / 2  # -1 .. 1
+    warm = meteo_var in ("sp_temp", "w_temp", "autumn_temp", "w_storm_days")
+    hi, lo = ([215, 60, 50], [50, 110, 200]) if warm else ([40, 100, 200], [200, 140, 50])
+    mv["r"] = np.where(z > 0, 240 + (hi[0] - 240) * z, 240 + (lo[0] - 240) * -z).astype(int)
+    mv["g"] = np.where(z > 0, 240 + (hi[1] - 240) * z, 240 + (lo[1] - 240) * -z).astype(int)
+    mv["b"] = np.where(z > 0, 240 + (hi[2] - 240) * z, 240 + (lo[2] - 240) * -z).astype(int)
+    name, unit = METEO[meteo_var]
+    mv["label"] = (mv["site"] + " — " + name + " : " + mv[meteo_var].round(1).astype(str) + " " + unit
+                   + " (" + mv["anom"].round(1).map(lambda x: f"{x:+}") + " vs moyenne 2002-2022)")
+    layers.append(pdk.Layer("ScatterplotLayer", mv, get_position=["lon", "lat"], get_radius=7000,
+                            get_fill_color="[r, g, b, 150]", stroked=True, get_line_color=[90, 90, 90, 120],
+                            line_width_min_pixels=1, pickable=True))
 if show_sites:
     sv = v.copy()
     sv["label"] = (sv["site"] + " — " + sv["ha"].round(1).astype(str) + " ha (" + sv["risque"] + ")")
@@ -177,7 +206,9 @@ st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=45),
                          tooltip={"text": "{label}"}), width="stretch", height=560)
 st.caption("Colonnes : surface cumulée d'ulves par plage · points : nitrates médians des rivières "
-           "(bleu < 10 mg/L → rouge > 50 mg/L) · arcs : rivières → baies pilotes (épaisseur ∝ flux).")
+           "(bleu < 10 mg/L → rouge > 50 mg/L) · arcs : rivières → baies pilotes (épaisseur ∝ flux) · "
+           "grands disques (couche météo) : écart à la normale de la plage — pluie/débit : bleu = plus humide, "
+           "orange = plus sec ; température/vent : rouge = plus chaud/venteux, bleu = plus froid/calme.")
 
 # ----------------------------------------------------------------------------- onglets
 tab1, tab2, tab3, tab4 = st.tabs(["🎯 Plages ciblées", "📈 Détail d'une plage", "🛰️ Baies pilotes", "🧠 Modèle"])
