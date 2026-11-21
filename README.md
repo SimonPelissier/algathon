@@ -51,10 +51,35 @@ tests/           tests unitaires
 
 **Approche de base** : gradient boosting sur des features tabulaires (indices spectraux et variables locales, avec leurs lags), validé par un **découpage temporel** (on n'entraîne jamais sur le futur). Des extensions sont prévues : U‑Net pour segmenter les ulves sur les images Sentinel‑2, et un modèle spatio‑temporel de type ConvLSTM.
 
+## L'Observatoire (application cartographique)
+
+Carte interactive de la Bretagne et de la façade atlantique (Cotentin → Vendée) :
+- **curseur temporel 2002 → 2027** : surfaces d'ulves observées (CEVA) jusqu'en 2022, estimées ensuite, prévues pour 2027 ;
+- **couches** : surface d'ulves par plage (colonnes 3D), nitrates des rivières, densité d'élevages (ICPE), flux de nitrates vers les baies pilotes ;
+- **scénarios 2027** : type d'hiver (doux / médian / rude), variation des nitrates et des élevages ;
+- **plages ciblées** : classement exportable des plages à risque ;
+- **suivi Sentinel-2** des baies pilotes.
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Pipeline complet pour régénérer les données de l'application :
+```bash
+python scripts/fetch_ceva.py
+python scripts/fetch_regional.py            # météo NASA POWER, nitrates Hub'Eau, élevages Géorisques
+python scripts/fetch_hubeau.py              # flux de nitrates des baies pilotes
+python scripts/fetch_s2.py --backend cdse   # surfaces d'ulves Sentinel-2 (compte CDSE)
+python scripts/train_seasonal.py            # modèle saisonnier + prévisions
+python scripts/export_app_data.py           # données légères pour app/data/
+```
+
 ## Démarrage rapide
 
 ```bash
 python -m venv .venv && .venv\Scripts\activate   # Windows
+# Python du Microsoft Store : créer plutôt le venv dans un chemin court
+# (ex. %USERPROFILE%\.venvs\algathon), sinon l'installation de streamlit échoue
 pip install -r requirements.txt
 python scripts/train.py --config configs/default.yaml
 ```

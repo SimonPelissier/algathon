@@ -2,7 +2,7 @@
 # Sites = noms exacts de la couche CEVA "prolif_AV_site" (GéoSAS, Licence Ouverte).
 
 ceva_sites_file: data/raw/ceva/prolif_AV_site.geojson
-period: {start: "2017-01-01", end: "2025-12-31"}
+period: {start: "2017-01-01", end: "2026-11-15"}
 
 sectors:
   saint_brieuc:          # plus gros site breton (moy. cumul ~375 ha/an à Morieux)

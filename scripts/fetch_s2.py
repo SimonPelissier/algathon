@@ -4,6 +4,8 @@
   python scripts/fetch_s2.py --backend gee --project MON_PROJET  # Google Earth Engine
 """
 import argparse
+
+import pandas as pd
 from _common import ROOT
 from algathon.ingest import sentinel2 as s2
 from algathon.sites import load_ceva, load_config, sector_sites
@@ -14,6 +16,7 @@ ap.add_argument("--project", help="ID du projet Google Cloud (backend gee)")
 ap.add_argument("--sector", help="un seul secteur (défaut : tous)")
 ap.add_argument("--start")
 ap.add_argument("--end")
+ap.add_argument("--force", action="store_true", help="recalcule les années déjà téléchargées")
 args = ap.parse_args()
 
 cfg = load_config(ROOT / "configs/sectors.yaml")
@@ -27,17 +30,35 @@ out_dir.mkdir(parents=True, exist_ok=True)
 for name, sec in cfg["sectors"].items():
     if args.sector and name != args.sector:
         continue
-    print(f"[{name}] {args.backend} {start} -> {end}")
     fc = sector_sites(ceva, sec["ceva_sites"], name)
-    if args.backend == "cdse":
-        df = s2.fetch_cdse(fc, start, end, p["ndvi_threshold"], p["max_cloud_cover"],
-                           ROOT / "data/raw/s2" / name)
-    else:
-        if not args.project:
-            ap.error("--project requis pour gee")
-        df = s2.fetch_gee(fc, start, end, p["ndvi_threshold"], p["max_cloud_cover"], args.project)
-    df = s2.finalize(df)
-    df.insert(0, "sector", name)
     dst = out_dir / f"{name}_{args.backend}.csv"
-    df.to_csv(dst, index=False)
-    print(f"  {len(df)} observations valides -> {dst}")
+    # découpage annuel : un job par année, résultats partiels conservés
+    parts = []
+    for y in range(int(start[:4]), int(end[:4]) + 1):
+        y0, y1 = max(start, f"{y}-01-01"), min(end, f"{y}-12-31")
+        part = out_dir / "parts" / f"{name}_{args.backend}_{y}.csv"
+        if part.exists() and not args.force:
+            parts.append(pd.read_csv(part, parse_dates=["date"]))
+            continue
+        print(f"[{name}] {args.backend} {y0} -> {y1}", flush=True)
+        try:
+            if args.backend == "cdse":
+                df = s2.fetch_cdse(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"],
+                                   ROOT / "data/raw/s2" / name / str(y))
+            else:
+                if not args.project:
+                    ap.error("--project requis pour gee")
+                df = s2.fetch_gee(fc, y0, y1, p["ndvi_threshold"], p["max_cloud_cover"], args.project)
+        except Exception as e:  # on continue avec les autres années
+            print(f"  ECHEC {name} {y}: {e!r}", flush=True)
+            continue
+        df = s2.finalize(df)
+        df.insert(0, "sector", name)
+        part.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(part, index=False)
+        print(f"  {name} {y}: {len(df)} observations valides", flush=True)
+        parts.append(df)
+    if parts:
+        allp = pd.concat(parts, ignore_index=True).sort_values(["site", "date"])
+        allp.to_csv(dst, index=False)
+        print(f"[{name}] total {len(allp)} observations -> {dst}", flush=True)
