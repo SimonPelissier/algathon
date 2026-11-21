@@ -2,9 +2,8 @@ numpy>=1.24
 pandas>=2.0
 scikit-learn>=1.4
 pyyaml>=6.0
+requests>=2.31
+truststore>=0.9        # utilise les certificats Windows/macOS (proxy, antivirus)
+openeo>=0.30           # Copernicus Data Space Ecosystem
+earthengine-api>=1.0   # Google Earth Engine
 pytest>=7.0
-# Ingestion satellite (étape suivante)
-# earthengine-api
-# openeo
-# rasterio
-# xarray

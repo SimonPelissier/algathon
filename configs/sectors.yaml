@@ -1,0 +1,25 @@
+# Secteurs pilotes (option A : prévision des échouages à court terme)
+# Sites = noms exacts de la couche CEVA "prolif_AV_site" (GéoSAS, Licence Ouverte).
+
+ceva_sites_file: data/raw/ceva/prolif_AV_site.geojson
+period: {start: "2017-01-01", end: "2025-12-31"}
+
+sectors:
+  saint_brieuc:          # plus gros site breton (moy. cumul ~375 ha/an à Morieux)
+    ceva_sites: [MORIEUX, YFFINIAC, "BINIC/ETABLES-SUR-MER"]
+    # bbox de recherche des stations + filtre par nom de rivière (sans accents)
+    hydro_bbox: [-2.95, 48.30, -2.45, 48.62]
+    rivers: [Gouessant, Evron, Urne, Gouet, Ic]
+  lannion:               # Lieue de Grève (Yar, Roscoat, Quinquis)
+    ceva_sites: [SAINT-MICHEL-EN-GREVE]
+    hydro_bbox: [-3.68, 48.55, -3.50, 48.72]
+    rivers: [Yar, Roscoat, Quinquis, Kerdu]
+  douarnenez:            # fond de baie de Douarnenez (Kerharo, Lapic, Ris, Névet)
+    ceva_sites: [SAINTE-ANNE-LA-PALUD, "KERVEL/TREZMALAOUEN", "KERVIJEN/TY AN QUER", RY, LIEUE-DE-GREVE]
+    hydro_bbox: [-4.45, 48.05, -4.05, 48.30]
+    rivers: [Kerharo, Lapic, Ris, Nevet, Aber, Kervigen, Lestrevet, Kerloc'h]
+
+sentinel2:
+  # Ulves détectées par seuil NDVI dans les polygones CEVA — À CALIBRER avec les cumuls annuels CEVA
+  ndvi_threshold: 0.25
+  max_cloud_cover: 80

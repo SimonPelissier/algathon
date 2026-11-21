@@ -61,13 +61,23 @@ python scripts/train.py --config configs/default.yaml
 
 Sans données réelles, `train.py` génère un **jeu synthétique** pour tester le pipeline de bout en bout.
 
+Récupération des données réelles (comptes, quotas, dépannage SSL) : voir [docs/acces_donnees.md](docs/acces_donnees.md).
+
+```bash
+python scripts/fetch_ceva.py                    # sites + cumuls annuels CEVA
+python scripts/fetch_hubeau.py                  # débits + nitrates par baie
+python scripts/fetch_s2.py --backend cdse       # surfaces d'ulves Sentinel-2
+```
+
 ## Feuille de route
 
 - [x] Squelette du pipeline (indices, features, baseline, validation temporelle)
-- [ ] Choisir la cible prioritaire : marées vertes (*Ulva*) ou micro‑algues toxiques
-- [ ] Choisir les baies pilotes (ex. Saint‑Brieuc, Lannion, Douarnenez)
-- [ ] Ingestion Sentinel‑2 sur ces baies (Earth Engine ou openEO), avec masque nuages
-- [ ] Récupérer la vérité terrain (CEVA et/ou REPHY) et l'aligner avec les images
-- [ ] Ajouter les variables locales : nitrates/débits des rivières, SST, météo, marées
+- [x] Cible : **marées vertes, prévision des échouages à court terme (J+3 à J+10)** pour les communes
+- [x] Baies pilotes : Saint‑Brieuc (Morieux, Yffiniac, Binic), Lannion (Saint‑Michel‑en‑Grève), Douarnenez — voir [configs/sectors.yaml](configs/sectors.yaml)
+- [x] Vérité terrain CEVA ouverte : contours des sites + cumuls annuels 2002‑2022 (`scripts/fetch_ceva.py`)
+- [x] Débits + nitrates des rivières par baie via Hub'Eau (`scripts/fetch_hubeau.py`)
+- [ ] Surfaces d'ulves Sentinel‑2 par site et par date — code prêt (`scripts/fetch_s2.py`, CDSE ou Earth Engine), à lancer avec les comptes
+- [ ] Calibrer le seuil NDVI avec les cumuls annuels CEVA ; demander au CEVA les données par inventaire
+- [ ] Ajouter SST, météo (vent, rayonnement), coefficients de marée
 - [ ] Baseline avec métriques PR‑AUC et F1 par horizon
 - [ ] Cartes de risque et tableau de bord
