@@ -79,6 +79,8 @@ pytest tests/
 | `src/algathon/series_annuelles.py` | table baie × année : surface CEVA, volumes ramassés, débits, nitrates, flux d'azote, météo |
 | `src/algathon/baseline_annuel.py` | modèles et validation par année (leave-one-year-out et fenêtre glissante) |
 | `notebooks/01_exploration_annuelle.ipynb` | séries, corrélations, nombre de points par baie |
+| `src/algathon/detection/` | surfaces d'ulves Sentinel-2 par scène (`sentinel2.py`), choix de la scène de basse mer et comparaison au CEVA (`calibration.py`) |
+| `notebooks/02_detection_sentinel2.ipynb` | disponibilité des scènes, effet de la marée, calibration du seuil NDVI |
 | `data/README.md` | sources, formats, périodes, comment régénérer les données |
 
 Ce qu'il faut savoir : le CEVA ne publie qu'**une surface cumulée par site et par an**
