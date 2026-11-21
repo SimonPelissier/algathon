@@ -10,3 +10,4 @@ data/processed/*
 *.nc
 models/
 .pytest_cache/
+rapports/

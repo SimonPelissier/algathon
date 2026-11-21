@@ -79,3 +79,28 @@ def correlation_par_baie(cumuls: pd.DataFrame, ceva: pd.DataFrame, colonne: str)
         "spearman": g[colonne].corr(g["surface_ha"], method="spearman"),
         "ratio_median": (g[colonne] / g["surface_ha"].where(g["surface_ha"] > 0)).median(),
     }))
+
+
+def selection_fenetres(scenes: pd.DataFrame, mois: Sequence[int], tolerance_j: int = 15,
+                       part_valide_min: float = 0.9) -> pd.DataFrame:
+    """Comme `selection_basse_mer`, mais pour chaque mois des survols CEVA on accepte les
+    scènes de ± `tolerance_j` jours autour du mois (les dates de survol varient d'une année
+    à l'autre). Une ligne par (baie, année, mois de survol)."""
+    s = scenes[scenes["zone_ha"] > 0].copy()
+    s["part_valide"] = s["valid_ha"] / s["zone_ha"]
+    s = s[s["part_valide"] >= part_valide_min]
+    s = s.sort_values("valid_ha").drop_duplicates(["baie", "date"], keep="last")
+    s["emergee_ha"] = s["valid_ha"] - s["eau_ha"]
+    d = pd.to_datetime(s["date"])
+    lignes = []
+    for m in mois:
+        for annee in sorted(d.dt.year.unique()):
+            debut = pd.Timestamp(annee, m, 1) - pd.Timedelta(days=tolerance_j)
+            fin = pd.Timestamp(annee, m, 1) + pd.offsets.MonthEnd(0) + pd.Timedelta(days=tolerance_j)
+            f = s[(d >= debut) & (d <= fin)].copy()
+            if f.empty:
+                continue
+            f["annee"], f["mois"] = annee, m
+            f["n_scenes_claires"] = f.groupby("baie")["date"].transform("count")
+            lignes.append(f.loc[f.groupby("baie")["emergee_ha"].idxmax()])
+    return pd.concat(lignes).sort_values(["baie", "annee", "mois"]).reset_index(drop=True)
