@@ -151,6 +151,41 @@ def to_month(D, v, year, m, prof, k):
     return v
 
 
+HEX_KM = 7.0  # rayon des zones hexagonales
+
+
+def _hex_ids(lon, lat):
+    """Hexagone (axial q, r) de chaque point ; projection simple en km autour de 48° N."""
+    x, y = np.asarray(lon) * 111.32 * np.cos(np.radians(48)), np.asarray(lat) * 110.57
+    q, r = (np.sqrt(3) / 3 * x - y / 3) / HEX_KM, (2 / 3 * y) / HEX_KM
+    s = -q - r
+    rq, rr, rs = np.round(q), np.round(r), np.round(s)
+    dq, dr, ds = np.abs(rq - q), np.abs(rr - r), np.abs(rs - s)
+    rq = np.where((dq > dr) & (dq > ds), -rr - rs, rq)
+    rr = np.where(~((dq > dr) & (dq > ds)) & (dr > ds), -rq - rs, rr)
+    return rq.astype(int), rr.astype(int)
+
+
+def _hex_poly(q, r):
+    cx, cy = HEX_KM * np.sqrt(3) * (q + r / 2), HEX_KM * 1.5 * r
+    ang = np.radians(30 + 60 * np.arange(6))
+    xs, ys = cx + HEX_KM * np.cos(ang), cy + HEX_KM * np.sin(ang)
+    return [[float(a / (111.32 * np.cos(np.radians(48)))), float(b / 110.57)] for a, b in zip(xs, ys)]
+
+
+def hex_zones(no3: pd.DataFrame, livestock: pd.DataFrame) -> pd.DataFrame:
+    """Nitrates moyens des rivières par zone : blanc (< 10 mg/L) -> jaune vif (>= 50 mg/L)."""
+    q, r = _hex_ids(no3["lon"], no3["lat"])
+    z = no3.assign(q=q, r=r).groupby(["q", "r"]).agg(no3=("no3", "mean"), n_st=("no3", "size")).reset_index()
+    lq, lr = _hex_ids(livestock["longitude"], livestock["latitude"])
+    n_lv = pd.Series(1, index=pd.MultiIndex.from_arrays([lq, lr])).groupby(level=[0, 1]).sum()
+    z["n_lv"] = [int(n_lv.get((a, b), 0)) for a, b in zip(z["q"], z["r"])]
+    t = ((z["no3"] - 10) / 40).clip(0, 1).values
+    z["c"] = [[255, int(255 - 40 * v), int(255 - 255 * v), int(70 + 150 * v)] for v in t]
+    z["poly"] = [_hex_poly(a, b) for a, b in zip(z["q"], z["r"])]
+    return z
+
+
 LEVEL_TXT = {1: "1 · faible", 2: "2 · modéré", 3: "3 · élevé", 4: "4 · très élevé"}
 LEVEL_RGB = {1: [90, 170, 110], 2: [240, 190, 60], 3: [230, 110, 40], 4: [180, 30, 45]}
 LEVEL_THR = [2, 8, 20]  # seuils de risque H2S (ha équivalents) entre niveaux, comme scripts/build_daily.py
@@ -232,9 +267,8 @@ if year >= FORECAST_YEAR:
     r_lv = st.sidebar.slider("Élevages (%)", -60, 20, 0, step=5)
 st.sidebar.markdown("**Couches**")
 show_sites = st.sidebar.checkbox("Plages (surface d'ulves)", True)
-show_no3 = st.sidebar.checkbox("Nitrates des rivières", True)
+show_no3 = st.sidebar.checkbox("Nitrates des rivières (zones)", True)
 show_lv = st.sidebar.checkbox("Densité d'élevages (ICPE)", False)
-show_flux = st.sidebar.checkbox("Flux de nitrates — baies pilotes", True)
 show_meteo = st.sidebar.checkbox("Météo et débits", False)
 METEO = METEO_MONTH if m_idx else METEO_YEAR
 meteo_var = st.sidebar.selectbox("Variable météo", list(METEO), format_func=lambda c: METEO[c][0]) if show_meteo else None
@@ -314,41 +348,12 @@ if show_no3:
         when = f"médiane {ny}"
     if future:
         no3["no3"] = no3["no3"] * (1 + r_no3 / 100)
-    x = (no3["no3"].clip(0, 50) / 50).values
-    no3["r"], no3["g"], no3["b"] = (60 + 190 * x).astype(int), (140 - 80 * x).astype(int), (200 - 170 * x).astype(int)
-    no3["label"] = ("Station " + no3["code_station"].astype(str) + " : "
-                    + no3["no3"].round(0).astype(int).astype(str) + f" mg NO₃/L ({when})")
-    layers.append(pdk.Layer("ScatterplotLayer", no3, get_position=["lon", "lat"], get_radius=900,
-                            get_fill_color="[r, g, b, 170]", pickable=True))
-if show_flux and D["hydro"]:
-    arcs = []
-    for sector, h in D["hydro"].items():
-        if h["no3_flux_kgd"].notna().sum() == 0:
-            continue
-        hy = h.dropna(subset=["no3_flux_kgd"])
-        if year < FORECAST_YEAR and hy["date"].dt.year.eq(year).any():
-            sel = hy[hy["date"].dt.year == year]
-            sel = sel[sel["date"].dt.month == m_idx] if m_idx else sel
-            when = f"{month} {year}" if m_idx else str(year)
-        else:  # avant/après la série : normale du mois (ou de l'année)
-            sel = hy[hy["date"].dt.month == m_idx] if m_idx else hy
-            when = "normale " + (month if m_idx else "annuelle")
-        flux = sel["no3_flux_kgd"].mean() * ((1 + r_no3 / 100) if year >= FORECAST_YEAR else 1)
-        bay = D["sites"][D["sites"]["pilot_sector"] == sector][["lon", "lat"]].mean()
-        st_sec = D["hydro_st"].get(sector, pd.DataFrame())
-        n_riv = max(len(st_sec), 1)
-        # flux mesuré pour l'ensemble des rivières de la baie (débit total x nitrate médian) :
-        # chaque flèche part d'une station de mesure et porte une part égale du total (pas un flux par rivière)
-        for _, s in st_sec.iterrows():
-            arcs.append({"from_lon": s["longitude_station"], "from_lat": s["latitude_station"],
-                         "to_lon": bay["lon"], "to_lat": bay["lat"], "flux": flux / n_riv,
-                         "label": f"Station {s['libelle_cours_eau']} → baie ({sector.replace('_', '-')}). "
-                                  f"Total des {n_riv} rivières suivies : {flux:,.0f} kg NO₃/j, {when}".replace(",", " ")})
-    if arcs:
-        layers.append(pdk.Layer("ArcLayer", pd.DataFrame(arcs), get_source_position=["from_lon", "from_lat"],
-                                get_target_position=["to_lon", "to_lat"], get_width="flux / 150",
-                                get_source_color=[230, 120, 40, 220], get_target_color=[40, 150, 90, 220],
-                                pickable=True))
+    zones = hex_zones(no3.dropna(subset=["no3"]), D["livestock"])
+    zones["label"] = ("Zone : " + zones["no3"].round(0).astype(int).astype(str) + f" mg NO₃/L en moyenne ({when}), "
+                      + zones["n_st"].astype(str) + " point(s) de mesure · " + zones["n_lv"].astype(str)
+                      + " élevage(s) classé(s)")
+    layers.append(pdk.Layer("PolygonLayer", zones, get_polygon="poly", get_fill_color="c", stroked=True,
+                            get_line_color=[255, 255, 255, 120], line_width_min_pixels=1, pickable=True))
 if show_meteo:
     name, unit = METEO[meteo_var]
     pos = D["table"].groupby("site")[["lon", "lat"]].first()
@@ -399,24 +404,29 @@ if show_sites:
     sv = v.copy()
     sv["label"] = (sv["site"] + " — " + sv["ha"].round(1).astype(str) + " ha (" + sv["risque"] + ") · "
                    + sv["source"])
-    layers.append(pdk.Layer("ColumnLayer", sv, get_position=["lon", "lat"], get_elevation="ha",
-                            elevation_scale=60 * (K / PROF.max() if m_idx else 1), radius=900,
-                            get_fill_color="color", pickable=True, auto_highlight=True, extruded=True))
-if dv is not None:  # jour choisi : anneaux colorés par niveau autour des plages pilotes
+    # cercle vert, surface du disque proportionnelle à la surface d'ulves (même échelle année / mois)
+    ha_year = sv["ha"] * (K / PROF.max() if m_idx else 1)
+    sv["radius"] = 500 * np.sqrt(ha_year.clip(lower=0))
+    layers.append(pdk.Layer("ScatterplotLayer", sv, get_position=["lon", "lat"], get_radius="radius",
+                            radius_min_pixels=3, get_fill_color=[30, 150, 60, 170], stroked=True,
+                            get_line_color=[10, 90, 30, 230], line_width_min_pixels=1,
+                            pickable=True, auto_highlight=True))
+if dv is not None:  # jour choisi : anneau coloré par niveau autour des plages pilotes
     ring = dv.copy()
-    ring["c"] = ring["niveau"].map(lambda x: LEVEL_RGB.get(int(x), [150, 150, 150]))
+    ring["c"] = ring["niveau"].map(lambda x: LEVEL_RGB.get(int(x), [150, 150, 150]) + [255])
     ring["label"] = ring["site"] + f" — {day:%d/%m/%Y} : niveau " + ring["niveau"].map(lambda x: LEVEL_TXT.get(int(x), ""))
-    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius=2600,
-                            get_fill_color="c", opacity=0.55, stroked=True, get_line_color=[40, 40, 40, 200],
-                            line_width_min_pixels=2, pickable=True))
+    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius=3500,
+                            filled=False, stroked=True, get_line_color="c", line_width_min_pixels=4, pickable=True))
 
 st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
-                         initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=45),
+                         initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=0),
                          tooltip={"text": "{label}"}), width="stretch", height=560)
-st.caption("Colonnes : surface d'ulves par plage (" + ("présente en moyenne ce mois-ci" if m_idx else "cumul annuel")
-           + ") · points : nitrates des rivières (bleu < 10 mg/L → rouge > 50 mg/L) · arcs : rivières → baies pilotes "
-           "(épaisseur ∝ flux) · grands disques (météo) : écart à la normale — pluie/débit : bleu = plus humide, "
-           "orange = plus sec ; température/vent : rouge = plus chaud/venteux, bleu = plus froid/calme.")
+st.caption("🟢 Cercles verts : marée verte par plage — plus le cercle est grand, plus la surface d'ulves est grande ("
+           + ("présente en moyenne ce mois-ci" if m_idx else "cumul annuel")
+           + ") · ⬡ Zones : nitrates des rivières, blanc < 10 mg/L → jaune vif ≥ 50 mg/L (moyenne des points de "
+           "mesure de la zone ; la concentration reflète l'azote lessivé par l'eau qui draine les sols)"
+           + (" · ⭕ Anneaux : niveau de risque du jour (vert 1 → rouge 4)" if dv is not None else "")
+           + " · grands disques (météo) : écart à la normale.")
 if m_idx:
     st.caption("Mois : cumul annuel ÷ " + f"{K:.1f}" + " × profil saisonnier mesuré par Sentinel-2 sur les baies "
                "pilotes ; quand le satellite a mesuré la plage au moins 2 fois ce mois-là, c'est sa mesure qui s'affiche. "
