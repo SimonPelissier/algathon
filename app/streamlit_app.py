@@ -66,6 +66,10 @@ def load():
     dr = DATA / "daily" / "daily_risk.parquet"
     d["daily"] = pd.read_parquet(dr) if dr.exists() else None
     d["daily_val"] = json.loads((DATA / "daily" / "validation.json").read_text(encoding="utf-8"))         if (DATA / "daily" / "validation.json").exists() else None
+    tp = DATA / "daily" / "tide_brest_pred.csv"
+    d["tide_pred"] = pd.read_csv(tp, parse_dates=["date"]).set_index("date")["coef_pred"] if tp.exists() else None
+    tv = DATA / "daily" / "tide_validation.json"
+    d["tide_val"] = json.loads(tv.read_text(encoding="utf-8")) if tv.exists() else None
     cal = DATA / "s2" / "calibration.json"
     d["s2_cal"] = json.loads(cal.read_text()) if cal.exists() else {"k": 6.3}
     return d
@@ -147,6 +151,58 @@ def to_month(D, v, year, m, prof, k):
     return v
 
 
+LEVEL_TXT = {1: "1 · faible", 2: "2 · modéré", 3: "3 · élevé", 4: "4 · très élevé"}
+LEVEL_RGB = {1: [90, 170, 110], 2: [240, 190, 60], 3: [230, 110, 40], 4: [180, 30, 45]}
+LEVEL_THR = [2, 8, 20]  # seuils de risque H2S (ha équivalents) entre niveaux, comme scripts/build_daily.py
+
+
+def level_of(r):
+    return 1 + int(np.searchsorted(LEVEL_THR, r, side="right"))
+
+
+def day_view(D, v, typical, date):
+    """Risque d'un jour donné pour les plages pilotes.
+
+    - jour de la série calculée (2017 -> J+10) : indice tel quel (météo et marées observées ou prévues) ;
+    - jour de 2027-2028 : risque ATTENDU = stock prévu (prévision annuelle du scénario x profil du mois)
+      x marée astronomique prédite (exacte) x chaleur et calme des mêmes dates (±7 j) de 2017-2025.
+      La dispersion de la météo passée donne la probabilité d'un niveau >= 3.
+    """
+    dr = D["daily"]
+    if dr is None:
+        return None, ""
+    g = dr[dr["date"] == date]
+    if len(g):
+        out = g[["site", "niveau", "risque_h2s", "stock_ha", "coef", "temperature_2m_max", "wind_speed_10m_max"]].copy()
+        out["p_eleve"] = np.nan
+        src = ("Prévision Météo-France / ECMWF + marées" if g["is_forecast"].any()
+               else "Indice calculé (satellite, météo et marées observées)")
+        return out, src
+    if date.year < FORECAST_YEAR or D["tide_pred"] is None:
+        return None, ""
+    tp = D["tide_pred"]
+    coef, coef3 = tp.get(date, np.nan), tp.rolling(3, min_periods=1).max().get(date, np.nan)
+    maree = 0.4 + 0.6 * np.clip((coef3 - 45) / 60, 0, 1) if pd.notna(coef3) else 0.7
+    hist = dr[~dr["is_forecast"]]
+    dist = (hist["date"].dt.dayofyear - date.dayofyear).abs()
+    win = hist[np.minimum(dist, 365 - dist) <= 7]
+    # stock attendu = stock satellite habituel de la plage à cette date x (prévision / année typique)
+    ratio = (v.set_index("site")["ha"] / typical).replace([np.inf, -np.inf], np.nan)
+    rows = []
+    for site, w in win.groupby("site"):
+        if pd.isna(ratio.get(site, np.nan)):
+            continue
+        stock = w["stock_ha"].median() * ratio[site]
+        r = stock * maree * (0.2 + 0.8 * w["chaleur"]) * w["calme"]
+        rows.append({"site": site, "niveau": level_of(r.median()), "risque_h2s": r.median(),
+                     "stock_ha": stock, "coef": coef, "temperature_2m_max": w["temperature_2m_max"].median(),
+                     "wind_speed_10m_max": w["wind_speed_10m_max"].median(), "p_eleve": (r >= LEVEL_THR[1]).mean()})
+    tv = D["tide_val"]
+    err = f" (erreur moyenne ±{tv['erreur_moyenne_coef']:.1f} point testée sur un an)" if tv else ""
+    return pd.DataFrame(rows), ("Risque attendu : marée astronomique prédite" + err + " · stock satellite habituel "
+                                "de la plage × prévision du scénario · météo : 2017-2025 aux mêmes dates (±7 j)")
+
+
 # ----------------------------------------------------------------------------- interface
 D, M = load(), load_model()
 K = D["s2_cal"]["k"]
@@ -156,6 +212,12 @@ st.sidebar.title("🌊 Marées vertes")
 year = st.sidebar.slider("Année", FIRST_YEAR, LAST_YEAR, FORECAST_YEAR)
 month = st.sidebar.select_slider("Mois", MONTHS, value="Année entière")
 m_idx = MONTHS.index(month)  # 0 = année entière
+day = None
+if m_idx and year >= 2017 and D["daily"] is not None:
+    nd = pd.Timestamp(year, m_idx, 1).days_in_month
+    dsel = st.sidebar.select_slider("Jour (baies pilotes)", ["Mois entier"] + list(range(1, nd + 1)), value="Mois entier")
+    if dsel != "Mois entier":
+        day = pd.Timestamp(year, m_idx, dsel)
 scenario, r_no3, r_lv = next(iter(M["scenarios"])), 0, 0
 if year >= FORECAST_YEAR:
     st.sidebar.markdown("**Scénarios 2027-2028**")
@@ -195,6 +257,27 @@ c1.metric("Surface présente (moyenne du mois)" if m_idx else "Surface cumulée 
 c2.metric("Plages à risque très élevé", int((v["risque"] == "Très élevé").sum()))
 c3.metric("Plages à risque élevé", int((v["risque"] == "Élevé").sum()))
 c4.metric("Source", v["source"].mode().iloc[0])
+
+dv = None
+if day is not None:
+    dv, dsrc = day_view(D, v, typical, day)
+    if dv is None or dv.empty:
+        dv = None
+        st.warning(f"Pas d'indice quotidien pour le {day:%d/%m/%Y} : il existe de 2017 à aujourd'hui + 10 jours "
+                   "(calculé), puis pour 2027-2028 (risque attendu).")
+    else:
+        dv = dv.merge(D["sites"][["site", "lon", "lat"]], on="site").sort_values("risque_h2s", ascending=False)
+        st.markdown(f"#### 📅 {day:%A %d/%m/%Y} — risque d'échouage et d'H₂S, plages des baies pilotes")
+        st.caption(dsrc + f" · coefficient de marée (Brest) : {dv['coef'].iloc[0]:.0f}")
+        tab_d = pd.DataFrame({"plage": dv["site"], "niveau": dv["niveau"].map(lambda x: LEVEL_TXT.get(int(x), "")),
+                              "indice": dv["risque_h2s"].round(1), "stock d'ulves (ha)": dv["stock_ha"].round(1),
+                              "T° max (°C)": dv["temperature_2m_max"].round(0),
+                              "vent max (km/h)": dv["wind_speed_10m_max"].round(0)})
+        if dv["p_eleve"].notna().any():
+            tab_d["proba. niveau ≥ 3"] = (dv["p_eleve"] * 100).round(0).astype(int).astype(str) + " %"
+        st.dataframe(tab_d.style.map(lambda x: {"1": "background-color:#d9efdf", "2": "background-color:#fbefc4",
+                                                "3": "background-color:#f9cfa9", "4": "background-color:#f1a7a7"}
+                                     .get(str(x)[:1], ""), subset=["niveau"]), width="stretch", hide_index=True)
 
 # ----------------------------------------------------------------------------- carte
 layers = []
@@ -312,6 +395,13 @@ if show_sites:
     layers.append(pdk.Layer("ColumnLayer", sv, get_position=["lon", "lat"], get_elevation="ha",
                             elevation_scale=60 * (K / PROF.max() if m_idx else 1), radius=900,
                             get_fill_color="color", pickable=True, auto_highlight=True, extruded=True))
+if dv is not None:  # jour choisi : anneaux colorés par niveau autour des plages pilotes
+    ring = dv.copy()
+    ring["c"] = ring["niveau"].map(lambda x: LEVEL_RGB.get(int(x), [150, 150, 150]))
+    ring["label"] = ring["site"] + f" — {day:%d/%m/%Y} : niveau " + ring["niveau"].map(lambda x: LEVEL_TXT.get(int(x), ""))
+    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius=2600,
+                            get_fill_color="c", opacity=0.55, stroked=True, get_line_color=[40, 40, 40, 200],
+                            line_width_min_pixels=2, pickable=True))
 
 st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          initial_view_state=pdk.ViewState(latitude=48.0, longitude=-3.2, zoom=6.6, pitch=45),

@@ -69,6 +69,11 @@ if dd.exists():
     (dst / "daily").mkdir(exist_ok=True)
     pd.concat(frames).round(2).to_parquet(dst / "daily/daily_risk.parquet", index=False)
     shutil.copy(dd / "validation.json", dst / "daily/validation.json")
+# marées prédites (Brest, analyse harmonique) pour les jours de 2027-2028
+for f in ["brest_pred.csv", "validation.json"]:
+    if (src / "tides" / f).exists():
+        (dst / "daily").mkdir(exist_ok=True)
+        shutil.copy(src / "tides" / f, dst / "daily" / ("tide_" + f))
 
 total = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
 print(f"app/data : {total / 1e6:.1f} Mo")
