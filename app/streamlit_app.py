@@ -151,6 +151,19 @@ def to_month(D, v, year, m, prof, k):
     return v
 
 
+def to_sea(df: pd.DataFrame, radius_m: pd.Series) -> pd.DataFrame:
+    """Décale le centre du cercle vers le large (sea_deg, calculé sur le trait de côte OSM) pour que le
+    cercle soit posé sur la mer devant la plage, sans dépasser la place disponible en mer."""
+    df = df.copy()
+    if "sea_deg" not in df:
+        return df
+    off = np.minimum(radius_m.values + 300, df["sea_room_km"].fillna(0).values * 1000 * 0.6)
+    a = np.radians(df["sea_deg"].fillna(0).values)
+    df["lat"] = df["lat"] + off * np.cos(a) / 110570
+    df["lon"] = df["lon"] + off * np.sin(a) / (111320 * np.cos(np.radians(df["lat"])))
+    return df
+
+
 HEX_KM = 7.0  # rayon des zones hexagonales
 
 
@@ -306,7 +319,8 @@ if day is not None:
         st.warning(f"Pas d'indice quotidien pour le {day:%d/%m/%Y} : il existe de 2017 à aujourd'hui + 10 jours "
                    "(calculé), puis pour 2027-2028 (risque attendu).")
     else:
-        dv = dv.merge(D["sites"][["site", "lon", "lat"]], on="site").sort_values("risque_h2s", ascending=False)
+        dv = dv.merge(D["sites"][["site", "lon", "lat"] + [c for c in ("sea_deg", "sea_room_km")
+                                                             if c in D["sites"]]], on="site").sort_values("risque_h2s", ascending=False)
         jour = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"][day.dayofweek]
         st.markdown(f"#### 📅 {jour} {day:%d/%m/%Y} — risque d'échouage et d'H₂S, plages des baies pilotes")
         st.caption(dsrc + f" · coefficient de marée (Brest) : {dv['coef'].iloc[0]:.0f}")
@@ -407,15 +421,19 @@ if show_sites:
     # cercle vert, surface du disque proportionnelle à la surface d'ulves (même échelle année / mois)
     ha_year = sv["ha"] * (K / PROF.max() if m_idx else 1)
     sv["radius"] = 500 * np.sqrt(ha_year.clip(lower=0))
+    sv = to_sea(sv, sv["radius"])
     layers.append(pdk.Layer("ScatterplotLayer", sv, get_position=["lon", "lat"], get_radius="radius",
                             radius_min_pixels=3, get_fill_color=[30, 150, 60, 170], stroked=True,
                             get_line_color=[10, 90, 30, 230], line_width_min_pixels=1,
                             pickable=True, auto_highlight=True))
 if dv is not None:  # jour choisi : anneau coloré par niveau autour des plages pilotes
-    ring = dv.copy()
+    ring = dv.merge(sv[["site", "radius"]], on="site", how="left") if show_sites else dv.assign(radius=2500.0)
+    ring["radius"] = ring["radius"].fillna(2500.0)
+    ring = to_sea(ring, ring["radius"])
     ring["c"] = ring["niveau"].map(lambda x: LEVEL_RGB.get(int(x), [150, 150, 150]) + [255])
     ring["label"] = ring["site"] + f" — {day:%d/%m/%Y} : niveau " + ring["niveau"].map(lambda x: LEVEL_TXT.get(int(x), ""))
-    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius=3500,
+    ring["ring_r"] = ring["radius"] + 900
+    layers.append(pdk.Layer("ScatterplotLayer", ring, get_position=["lon", "lat"], get_radius="ring_r",
                             filled=False, stroked=True, get_line_color="c", line_width_min_pixels=4, pickable=True))
 
 st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
