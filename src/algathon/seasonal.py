@@ -238,7 +238,8 @@ def hindcast(bundle: dict, t: pd.DataFrame, years) -> pd.DataFrame:
         X["prev_anom"] = (X["prev_anom"] - X["site_hist"]).fillna(0.0)
         X["pred_log"] = X["site_hist"] + m.predict(X[FEATURES])
         X["facteurs"] = top_factors(_contributions(m, X)).values
-        prev.update({(s, y): v for s, v in zip(X["site"], X["pred_log"])})
+        # chaînage : la prévision sert de report l'année suivante, sauf si l'année est observée
+        prev.update({(s, y): v for s, v in zip(X["site"], X["pred_log"]) if (s, y) not in prev})
         out.append(X)
     return pd.concat(out)
 

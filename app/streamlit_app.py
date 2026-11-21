@@ -45,8 +45,12 @@ def load():
         key = p.stem.replace("_stations", "")
         target = d["hydro_st"] if p.stem.endswith("_stations") else d["hydro"]
         target[key] = pd.read_csv(p, parse_dates=None if p.stem.endswith("_stations") else ["date"])
-    for p in (DATA / "s2").glob("*_cdse.csv"):
-        d["s2"][p.stem.replace("_cdse", "")] = pd.read_csv(p, parse_dates=["date"])
+    daily = DATA / "s2" / "s2_daily_corrected.csv"
+    if daily.exists():
+        s2 = pd.read_csv(daily, parse_dates=["date"])
+        d["s2"] = {k: g for k, g in s2.groupby("sector")}
+    d["s2_annual"] = pd.read_csv(DATA / "s2" / "s2_annual.csv") if (DATA / "s2" / "s2_annual.csv").exists() else None
+    d["s2_cal"] = json.loads((DATA / "s2" / "calibration.json").read_text()) if (DATA / "s2" / "calibration.json").exists() else None
     return d
 
 
@@ -79,6 +83,14 @@ def year_values(D, M, year, scenario, r_no3, r_lv):
         v["ha_lo"], v["ha_hi"] = np.expm1(v["pred_log"] - s).clip(0), np.expm1(v["pred_log"] + s).clip(0)
         v["source"] = "Estimé (modèle + météo réelle)"
         v = v.drop(columns="pred_log")
+        if D["s2_annual"] is not None:  # baies pilotes : mesure satellite calibrée sur le CEVA
+            sat = D["s2_annual"][(D["s2_annual"]["year"] == year) & (D["s2_annual"]["n_images"] >= 5)]
+            sat = sat.set_index("site")["cumul_equiv_ha"]
+            hit = v["site"].isin(sat.index)
+            v.loc[hit, "ha"] = v.loc[hit, "site"].map(sat).values
+            v.loc[hit, "ha_lo"] = v.loc[hit, "ha"] * 0.6
+            v.loc[hit, "ha_hi"] = v.loc[hit, "ha"] * 1.4
+            v.loc[hit, "facteurs"] = "mesure Sentinel-2 calibrée sur le CEVA"
     else:
         v = predict_2027(D, M, scenario, r_no3, r_lv)
     v = v.merge(D["sites"], on="site")
@@ -185,9 +197,11 @@ with tab2:
     obs = D["ceva"][D["ceva"]["site"] == site].set_index("year")["cumul_ha"].rename("Observé (CEVA)")
     cv = D["cv"][D["cv"]["site"] == site].set_index("year")["pred_log"].pipe(np.expm1).rename("Modèle (validation croisée)")
     hc = D["hindcast"][D["hindcast"]["site"] == site].set_index("year")["pred_ha"].rename("Estimé 2023-2026")
+    sat = (D["s2_annual"][D["s2_annual"]["site"] == site].set_index("year")["cumul_equiv_ha"].rename("Satellite calibré")
+           if D["s2_annual"] is not None else pd.Series(dtype=float, name="Satellite calibré"))
     f27 = predict_2027(D, M, scenario, r_no3, r_lv).set_index("site")
     p27 = pd.Series({FORECAST_YEAR: f27.loc[site, "ha"]} if site in f27.index else {}, name="Prévision 2027")
-    st.line_chart(pd.concat([obs, cv, hc, p27], axis=1))
+    st.line_chart(pd.concat([obs, cv, hc, sat, p27], axis=1))
     row = D["table"][D["table"]["site"] == site]
     st.markdown("**Conditions de l'hiver et du printemps** (variables du modèle)")
     if site in f27.index:
@@ -202,14 +216,21 @@ with tab3:
     else:
         sector = st.selectbox("Baie pilote", sorted(D["s2"]))
         s2 = D["s2"][sector]
-        piv = s2.pivot_table(index="date", columns="site", values="ulva_ha_est")
-        st.markdown("**Surface d'ulves détectée par Sentinel-2 (ha, images sans nuages)**")
+        piv = s2.pivot_table(index="date", columns="site", values="ulva_ha_corr")
+        st.markdown("**Surface d'ulves détectée par Sentinel-2** (ha, images sans nuages, fond de la plage retiré)")
         st.scatter_chart(piv)
+        if D["s2_annual"] is not None:
+            an = D["s2_annual"][D["s2_annual"]["site"].isin(piv.columns)]
+            st.markdown("**Cumul annuel : CEVA (observé) vs satellite calibré** (ha)")
+            st.bar_chart(an.pivot_table(index="year", columns="site", values="cumul_equiv_ha"), stack=False)
+            cal = D["s2_cal"]
+            st.caption(f"Calibration 2017-2022 : cumul CEVA ≈ {cal['k']:.1f} × surface moyenne mai-sept. "
+                       f"(corrélation {cal['pearson']:.2f} ; {cal['intra_site_corr']:.2f} d'une année sur l'autre).")
         if sector in D["hydro"]:
             st.markdown("**Flux de nitrates vers la baie (kg NO₃/jour)**")
             st.line_chart(D["hydro"][sector].set_index("date")["no3_flux_kgd"].rolling(7).mean())
         st.caption("Le satellite passe à heure fixe : à marée haute, les ulves immergées sont sous-détectées "
-                   "(correction marée prévue). Seuil NDVI non encore calibré sur le CEVA.")
+                   "(correction marée prévue).")
 
 with tab4:
     m = D["metrics"]

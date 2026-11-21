@@ -45,7 +45,18 @@ bundle = {
     "n_elevages": t.groupby("site")["n_elevages"].first(),
     "scenarios": S.scenario_anomalies(obs),
 }
-hc = S.hindcast(bundle, t, range(2023, 2027))
+# baies pilotes : après 2022, les cumuls « équivalent CEVA » issus de Sentinel-2 servent d'observations
+# pour le report d'une année sur l'autre (pas pour l'entraînement : mesure différente)
+t_obs = t.copy()
+s2a = ROOT / "data/processed/s2/s2_annual.csv"
+if s2a.exists():
+    sat = pd.read_csv(s2a)
+    sat = sat[(sat["year"] > 2022) & (sat["n_images"] >= 5)].set_index(["site", "year"])["cumul_equiv_ha"]
+    key = pd.MultiIndex.from_frame(t_obs[["site", "year"]])
+    fill = pd.Series(np.log1p(sat.reindex(key).values), index=t_obs.index)
+    t_obs["y_log"] = t_obs["y_log"].fillna(fill)
+    print(f"satellite : {sat.size} cumuls équivalents 2023+ utilisés comme observations")
+hc = S.hindcast(bundle, t_obs, range(2023, 2027))
 hc["pred_ha"] = np.expm1(hc["pred_log"]).clip(lower=0)
 hc[["site", "year", "pred_ha", "pred_log", "facteurs"] + S.DYNAMIC].to_csv(out / "hindcast.csv", index=False)
 

@@ -1,0 +1,18 @@
+{
+  "k": 6.391279470473237,
+  "n": 49,
+  "pearson": 0.8584365961013286,
+  "spearman": 0.6166800189296546,
+  "intra_site_corr": 0.5846645795546677,
+  "background_ha": {
+    "BINIC/ETABLES-SUR-MER": 8.53,
+    "KERVEL/TREZMALAOUEN": 3.05,
+    "KERVIJEN/TY AN QUER": 5.13,
+    "LIEUE-DE-GREVE": 23.17,
+    "MORIEUX": 20.13,
+    "RY": 2.37,
+    "SAINT-MICHEL-EN-GREVE": 9.37,
+    "SAINTE-ANNE-LA-PALUD": 6.49,
+    "YFFINIAC": 111.53
+  }
+}

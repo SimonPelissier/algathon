@@ -41,5 +41,10 @@ for name in cfg["sectors"]:
             (dst / f).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(p, dst / f)
 
+for f in ["s2/s2_annual.csv", "s2/s2_daily_corrected.csv", "s2/calibration.json"]:
+    if (src / f).exists():
+        (dst / f).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src / f, dst / f)
+
 total = sum(p.stat().st_size for p in dst.rglob("*") if p.is_file())
 print(f"app/data : {total / 1e6:.1f} Mo")
