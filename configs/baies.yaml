@@ -1,0 +1,130 @@
+# Baies à ulves suivies par le projet.
+#
+# Pour chaque baie :
+#   sites_ceva      identifiants (champ ID) des sites de la couche CEVA greenseas:prolif_AV_site.
+#                   On travaille par identifiant, pas par nom : le site nommé « LIEUE-DE-GREVE »
+#                   dans la couche CEVA est en baie de Douarnenez (Crozon), alors que la
+#                   Lieue de Grève des Côtes-d'Armor correspond au site SAINT-MICHEL-EN-GREVE.
+#   communes_insee  communes de la couche greenseas:enquete_communale_AV_bretagne (volumes ramassés).
+#                   Codes tels qu'ils figurent dans la couche (anciens codes avant fusions).
+#   emprise         [lon_min, lat_min, lon_max, lat_max] en WGS84, emprise des sites CEVA
+#                   (sert à la détection satellite).
+#   meteo           point utilisé pour Open-Meteo (centre de l'emprise).
+#   rivieres        rivières qui se jettent dans la baie :
+#                     debit     code station hydrométrique Hub'Eau (débit journalier)
+#                     nitrates  codes stations qualité Hub'Eau, par ordre de priorité :
+#                               la première station disponible un jour donné est utilisée,
+#                               les suivantes comblent ses trous.
+#                     debit_proxy  true si la station de débit est sur un bassin voisin
+#                               (le flux calculé est alors un indice, pas un flux réel).
+#
+# Années de couverture vérifiées le 2026-11-21 (premier/dernier prélèvement de nitrates).
+
+periode:
+  debut_donnees: "2001-01-01"   # on charge 2001 pour avoir la valeur N-1 de 2002
+  annee_min: 2002
+  annee_max: 2022               # dernière année publiée par le CEVA
+
+saisons:
+  prevision_jan_avr: [1, 2, 3, 4]      # connu avant la saison : prévision au 1er mai
+  diagnostic_mai_aout: [5, 6, 7, 8]    # pendant la saison : explique, ne prévoit pas
+  meteo_mars_avr: [3, 4]
+  meteo_mars_mai: [3, 4, 5]
+
+baies:
+  saint_brieuc:
+    nom: Baie de Saint-Brieuc (fond de baie)
+    sites_ceva: [92, 93]            # YFFINIAC, MORIEUX
+    communes_insee: ["22081", "22154", "22389", "22106", "22278", "22187", "22173"]
+    emprise: [-2.7296, 48.4931, -2.5690, 48.5870]
+    meteo: {lat: 48.540, lon: -2.649}
+    rivieres:
+      - nom: Gouessant
+        debit: J131301001            # Andel, depuis 1979
+        nitrates: ["04168140", "04168050"]   # Coëtmieux, Noyal (2002+)
+      - nom: Urne
+        debit: J140531001            # Plédran, depuis 1993
+        nitrates: ["04168250", "04168256"]   # Plédran (2001+), Trégueux
+      - nom: Gouët
+        debit: J152302001            # Ploufragan, aval barrage, depuis 1994
+        nitrates: ["04171010", "04170500"]   # Ploufragan, Saint-Julien (2001+)
+
+  lieue_de_greve:
+    nom: Lieue de Grève (Saint-Michel-en-Grève)
+    sites_ceva: [78]                # SAINT-MICHEL-EN-GREVE
+    communes_insee: ["22319", "22350", "22194", "22349"]
+    emprise: [-3.6228, 48.6692, -3.5674, 48.7010]
+    meteo: {lat: 48.685, lon: -3.595}
+    rivieres:
+      - nom: Yar
+        debit: J231491001            # Tréduder, depuis 1980
+        nitrates: ["04173200", "04323024"]   # Tréduder (2001+), Plestin (2016+)
+    # Le Roscoat a des nitrates (04323001, 2015+) mais pas de station de débit : non utilisé.
+
+  fresnaye:
+    nom: Baie de la Fresnaye
+    sites_ceva: [96]                # FRESNAYE
+    communes_insee: ["22282", "22143", "22174", "22201"]
+    emprise: [-2.3376, 48.6098, -2.2334, 48.6689]
+    meteo: {lat: 48.639, lon: -2.286}
+    rivieres:
+      - nom: Frémur d'Hénanbihen
+        debit: J120541001            # Pléboulle, seulement depuis 2010
+        nitrates: ["04167600", "04167650"]   # Hénanbihen (2001+), Pléboulle (2019+)
+    # Attention : le Frémur de Lancieux (J100452001) se jette à Lancieux, pas en Fresnaye.
+
+  horn_guillec:
+    nom: Anse de l'Horn et du Guillec
+    sites_ceva: [106]               # HORN/GUILLEC
+    communes_insee: ["29273", "29192", "29276"]
+    emprise: [-4.0887, 48.6749, -4.0380, 48.7116]
+    meteo: {lat: 48.693, lon: -4.063}
+    rivieres:
+      - nom: Horn
+        debit: J301433001            # Mespaul, depuis 1991
+        nitrates: ["04174550", "04174540", "04174520"]  # St-Pol (2009+), Plouénan (2001-2008), Mespaul
+      - nom: Guillec
+        debit: J302401001            # Trézilidé, depuis 1966
+        nitrates: ["04174670", "04174660"]   # Plougoulm (2009+), Trézilidé (2005+)
+
+  guisseny:
+    nom: Anse de Guissény
+    sites_ceva: [64]                # GUISSENY
+    communes_insee: ["29077", "29091"]
+    emprise: [-4.4530, 48.6352, -4.3977, 48.6605]
+    meteo: {lat: 48.648, lon: -4.425}
+    rivieres:
+      - nom: Quillimadec
+        # La station du Quillimadec (J311401001) est fermée depuis 1982.
+        # Substitut : l'Aber Benoît à Plabennec, bassin voisin. Le flux est un indice.
+        debit: J321302002
+        debit_proxy: true
+        nitrates: ["04174770", "04331000"]   # Guissény (2009+), Plouider (2013+)
+
+  douarnenez:
+    nom: Baie de Douarnenez (toutes plages sableuses)
+    # LIEUE-DE-GREVE (29), KERVIJEN/TY AN QUER, SAINTE-ANNE-LA-PALUD, KERVEL/TREZMALAOUEN,
+    # RY, PORT RHU/TREBOUL, PORSLOUS, TREZ-BIHAN/TREZ-BELLEC, ABER, POSTOLONNEC, MORGAT
+    sites_ceva: [1, 2, 3, 4, 5, 6, 44, 45, 46, 47, 48]
+    communes_insee: ["29176", "29090", "29172", "29046", "29166", "29256", "29280", "29042"]
+    emprise: [-4.5041, 48.0889, -4.2675, 48.2389]
+    meteo: {lat: 48.164, lon: -4.386}
+    rivieres:
+      - nom: Kerharo
+        debit: J392000601            # Ploéven, seulement depuis 2013
+        nitrates: ["04179678", "04339004"]   # Ploéven (2009+), Ploéven (2013+)
+    # Lapic (04179681) et Nevet (04179690, 2007+) ont des nitrates mais pas de débit.
+
+  concarneau_la_foret:
+    nom: Baies de Concarneau et de La Forêt-Fouesnant
+    # BEG MEIL, BEG MEIL NORD, CAP COZ, KERLEVEN/SAINT-LAURENT, CONCARNEAU, CABELLOU,
+    # ANSE DE POULDOHAN, MOUSTERLIN
+    sites_ceva: [12, 13, 14, 15, 16, 17, 18, 126]
+    communes_insee: ["29039", "29057", "29058"]
+    emprise: [-4.0908, 47.8342, -3.8865, 47.9051]
+    meteo: {lat: 47.870, lon: -3.989}
+    rivieres:
+      - nom: Moros
+        debit: J451401001            # Concarneau, depuis 1991
+        nitrates: ["04184200", "04184195"]   # Concarneau (2013+), Concarneau (2005+)
+    # Le Saint-Laurent (04345004, 2013+) a des nitrates mais pas de débit.

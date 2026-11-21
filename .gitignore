@@ -9,3 +9,4 @@ data/processed/*
 *.tif
 *.nc
 models/
+.pytest_cache/
