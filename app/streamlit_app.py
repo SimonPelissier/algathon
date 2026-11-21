@@ -245,14 +245,18 @@ if show_flux and D["hydro"]:
             when = "normale " + (month if m_idx else "annuelle")
         flux = sel["no3_flux_kgd"].mean() * ((1 + r_no3 / 100) if year >= FORECAST_YEAR else 1)
         bay = D["sites"][D["sites"]["pilot_sector"] == sector][["lon", "lat"]].mean()
-        for _, s in D["hydro_st"].get(sector, pd.DataFrame()).iterrows():
+        st_sec = D["hydro_st"].get(sector, pd.DataFrame())
+        n_riv = max(len(st_sec), 1)
+        # flux mesuré pour l'ensemble des rivières de la baie (débit total x nitrate médian) :
+        # chaque flèche part d'une station de mesure et porte une part égale du total (pas un flux par rivière)
+        for _, s in st_sec.iterrows():
             arcs.append({"from_lon": s["longitude_station"], "from_lat": s["latitude_station"],
-                         "to_lon": bay["lon"], "to_lat": bay["lat"], "flux": flux,
-                         "label": f"{s['libelle_cours_eau']} → baie ({sector.replace('_', '-')}) : "
-                                  f"{flux:,.0f} kg NO₃/j, {when}".replace(",", " ")})
+                         "to_lon": bay["lon"], "to_lat": bay["lat"], "flux": flux / n_riv,
+                         "label": f"Station {s['libelle_cours_eau']} → baie ({sector.replace('_', '-')}). "
+                                  f"Total des {n_riv} rivières suivies : {flux:,.0f} kg NO₃/j, {when}".replace(",", " ")})
     if arcs:
         layers.append(pdk.Layer("ArcLayer", pd.DataFrame(arcs), get_source_position=["from_lon", "from_lat"],
-                                get_target_position=["to_lon", "to_lat"], get_width="flux / 400",
+                                get_target_position=["to_lon", "to_lat"], get_width="flux / 150",
                                 get_source_color=[230, 120, 40, 220], get_target_color=[40, 150, 90, 220],
                                 pickable=True))
 if show_meteo:
