@@ -204,10 +204,12 @@ def river_paths(D, no3: pd.DataFrame, year: int, m_idx: int, future: bool, site_
     ext = ext[ext["site"].isin(pos.index)]
     ext["path"] = [[m, [float(pos.loc[s_, "lon"]), float(pos.loc[s_, "lat"])]] for m, s_ in zip(ext["mouth"], ext["site"])]
     paths = pd.concat([paths, ext], ignore_index=True)
-    t = ((paths["no3"] - 10) / 40).clip(0, 1).values
-    paths["c"] = [[255, int(250 - 50 * v), int(235 - 235 * v), 235] for v in t]
-    paths["w"] = (1.5 + np.sqrt(paths["flux"].clip(lower=0)) / 8).clip(1.5, 16)
-    paths["w_under"] = paths["w"] + 2
+    # bleu : clair = peu de flux d'azote (~100 kg/j), foncé = beaucoup (>= ~20 000 kg/j), échelle log
+    t = ((np.log10(paths["flux"].clip(lower=1)) - 2) / 2.3).clip(0, 1).values
+    lo, hi = np.array([198, 225, 245]), np.array([8, 48, 140])
+    paths["c"] = [[*(lo + (hi - lo) * v).astype(int).tolist(), 240] for v in t]
+    paths["w"] = 4.0
+    paths["w_under"] = 6.5
     paths["label"] = (paths["name"] + " → " + paths["site"] + " : " + paths["no3"].round(0).astype(int).astype(str)
                       + " mg NO₃/L, ≈ " + paths["flux"].round(-1).astype(int).map(lambda x: f"{x:,}".replace(",", " "))
                       + " kg d'azote (NO₃) par jour (" + when + ", débit "
@@ -427,7 +429,7 @@ if show_no3:
     if D.get("rivers") is not None:
         rp = river_paths(D, no3, year, m_idx, future, site_pos, when)
         layers.append(pdk.Layer("PathLayer", rp, get_path="path", get_width="w_under", width_units=pdk.types.String("pixels"),
-                                get_color=[70, 70, 70, 170], cap_rounded=True, joint_rounded=True))
+                                get_color=[255, 255, 255, 220], cap_rounded=True, joint_rounded=True))
         layers.append(pdk.Layer("PathLayer", rp, get_path="path", get_width="w", width_units=pdk.types.String("pixels"),
                                 get_color="c", cap_rounded=True, joint_rounded=True, pickable=True,
                                 auto_highlight=True))
@@ -493,9 +495,9 @@ st.pydeck_chart(pdk.Deck(layers=layers, map_provider="carto", map_style="light",
                          tooltip={"text": "{label}"}), width="stretch", height=560)
 st.markdown("🔴 **Cercles rouges : marée verte devant chaque plage** — plus le cercle est grand et rouge foncé, "
             "plus il y a d'ulves (" + ("présentes en moyenne ce mois-ci" if m_idx else "cumul de l'année")
-            + ") et plus l'urgence est forte. 🟨 **Rivières et zones jaunes : nitrates** — plus c'est jaune vif, "
-            "plus l'eau est chargée en azote lessivé des sols (blanc < 10 mg/L, jaune ≥ 50 mg/L) ; plus la rivière "
-            "est épaisse, plus elle apporte d'azote à la baie.")
+            + ") et plus l'urgence est forte. 🟦 **Rivières : plus le bleu est foncé, plus la rivière apporte "
+            "d'azote à la baie** (kg de nitrates par jour) ; 🟨 zones : plus c'est jaune, plus l'eau des sols est "
+            "chargée en nitrates.")
 if show_meteo:
     st.caption("Grands disques (météo) : écart à la normale.")
 if m_idx:
